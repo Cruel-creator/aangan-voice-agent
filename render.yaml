@@ -1,20 +1,27 @@
-# Validate before first deploy:  render blueprints validate   (Render CLI v2.7.0+)
+# FREE setup: one web service on Render's free plan.
+# - Free instances sleep after 15 min without traffic and take about a minute to wake.
+#   Fine for testing; switch `plan` to a paid instance before taking real calls.
+# - Free plan has no cron jobs: .github/workflows/cron.yml calls /cron/* instead.
+# - Free plan has no pre-deploy command: run migrations yourself with
+#   `uv run python -m scripts.migrate` (they are already applied on Neon production).
+# Paid setup (restores both): plan: starter, add
+#   preDeployCommand: /srv/.venv/bin/python -m scripts.migrate
+# and move the scheduled jobs back to Render cron services if preferred.
 services:
   - type: web
     name: aangan-voice-agent
     runtime: docker
-    region: singapore          # closest Render region to Pune
-    plan: starter
+    region: singapore          # closest Render region to Pune; Neon project is in AWS Singapore
+    plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     autoDeployTrigger: commit         # repo has no CI checks; deploy on every push to main
-    preDeployCommand: /srv/.venv/bin/python -m scripts.migrate   # applies db/migrations on Neon
     envVars:
       - { key: APP_ENV, value: production }
       - { key: PUBLIC_BASE_URL, sync: false }
       - { key: TOOL_WEBHOOK_SECRET, sync: false }    # paste the same value into the voice platform
       - { key: DATABASE_URL, sync: false }           # Neon pooled string (-pooler host)
-      - { key: DATABASE_URL_UNPOOLED, sync: false }    # Neon direct string, used by migrations
+      - { key: DATABASE_URL_UNPOOLED, sync: false }  # Neon direct string, used by migrations
       - { key: PHONE_HASH_KEY, generateValue: true }
       - { key: PHONE_ENCRYPTION_KEY, sync: false }   # Fernet key; generateValue is not Fernet-shaped
       - { key: GOOGLE_SERVICE_ACCOUNT_JSON, sync: false }
@@ -30,33 +37,7 @@ services:
       - { key: PORTFOLIO_URL, sync: false }
       - { key: DASHBOARD_USER, sync: false }
       - { key: DASHBOARD_PASSWORD, sync: false }
-      - { key: CRON_SECRET, generateValue: true }
+      - { key: CRON_SECRET, sync: false }            # same value goes into the GitHub Actions secret
       - { key: USD_INR_RATE, sync: false }
       - { key: TELEPHONY_COST_INR_PER_MIN, sync: false }
       - { key: FIXED_MONTHLY_COST_INR, sync: false }
-
-  - type: cron
-    name: aangan-reroute-handoffs
-    runtime: python
-    region: singapore
-    plan: starter
-    schedule: "*/15 * * * *"
-    buildCommand: "true"
-    startCommand: python scripts/run_cron.py reroute-handoffs
-    envVars:
-      - { key: PUBLIC_BASE_URL, sync: false }
-      - key: CRON_SECRET
-        fromService: { type: web, name: aangan-voice-agent, envVarKey: CRON_SECRET }
-
-  - type: cron
-    name: aangan-consult-followups
-    runtime: python
-    region: singapore
-    plan: starter
-    schedule: "0 * * * *"
-    buildCommand: "true"
-    startCommand: python scripts/run_cron.py consult-followups
-    envVars:
-      - { key: PUBLIC_BASE_URL, sync: false }
-      - key: CRON_SECRET
-        fromService: { type: web, name: aangan-voice-agent, envVarKey: CRON_SECRET }

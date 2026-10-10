@@ -1,0 +1,39 @@
+# Free replacement for Render cron jobs (Render's free plan has no cron).
+# Needs two repository secrets: PUBLIC_BASE_URL and CRON_SECRET
+# (Settings -> Secrets and variables -> Actions). Until they exist the job skips.
+# GitHub may start scheduled runs a few minutes late; that's fine for these jobs.
+name: scheduled-jobs
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # re-route unacknowledged handoffs
+    - cron: "0 * * * *"      # post-consultation follow-ups
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Job to run now
+        type: choice
+        options: [reroute-handoffs, consult-followups]
+
+permissions: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trigger job
+        env:
+          PUBLIC_BASE_URL: ${{ secrets.PUBLIC_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SCHEDULE: ${{ github.event.schedule }}
+          MANUAL_JOB: ${{ inputs.job }}
+        run: |
+          if [ -n "$MANUAL_JOB" ]; then
+            python3 scripts/run_cron.py "$MANUAL_JOB"
+          elif [ "$SCHEDULE" = "0 * * * *" ]; then
+            python3 scripts/run_cron.py consult-followups   # the */15 run covers re-routing at :00
+          else
+            python3 scripts/run_cron.py reroute-handoffs
+          fi

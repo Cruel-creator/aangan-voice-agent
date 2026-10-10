@@ -50,14 +50,19 @@ Windows note: if the project lives under a very long path, DLL imports fail with
 1. **Neon:** create a project in the region closest to Render Singapore. From Connect, copy the
    **pooled** string into `DATABASE_URL` and the **direct** string into `DATABASE_URL_UNPOOLED` (`neon link` does both, into `.env.local`).
    Edit `db/seed.sql` with real designers (Telegram chat ids, calendar ids, areas), then:
-   `uv run python -m scripts.migrate --seed` (later deploys run migrations automatically via
-   `preDeployCommand`).
+   `uv run python -m scripts.migrate --seed`. On Render's free plan there is no pre-deploy step,
+   so run `uv run python -m scripts.migrate` yourself whenever `db/migrations` changes.
 2. **Google:** create a service account. Each designer shares their calendar with its email
    ("Make changes to events"). Put the JSON in `GOOGLE_SERVICE_ACCOUNT_JSON`.
 3. **Telegram:** create a bot with @BotFather. Every designer and the studio head must open it
    and press Start. Set the webhook:
    `https://api.telegram.org/bot<TOKEN>/setWebhook?url=<PUBLIC_BASE_URL>/webhooks/telegram&secret_token=<TELEGRAM_WEBHOOK_SECRET>`
-4. **Render:** deploy with `render.yaml` and fill every `sync: false` value.
+4. **Render (free plan):** deploy with `render.yaml` and fill every `sync: false` value. The free
+   service sleeps after 15 min idle and takes about a minute to wake, so use a paid plan before
+   real calls (see the comment at the top of `render.yaml`).
+   Scheduled jobs run from GitHub Actions (`.github/workflows/cron.yml`): add repository secrets
+   `PUBLIC_BASE_URL` and `CRON_SECRET` (same value as on Render) under
+   Settings → Secrets and variables → Actions.
 5. **Voice platform:** run `uv run python -m scripts.export_tools`, load `agent_config.json` into the
    platform, point tools at `/tools/{name}` and the end-of-call hook at `/webhooks/end-of-call`,
    with the Bearer secret (see `docs/PLATFORM_API.md`). Use an English + Hindi speech model.

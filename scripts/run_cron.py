@@ -1,10 +1,12 @@
-"""Called by Render cron jobs: POSTs to the web service's /cron endpoints.
+"""Triggers the web service's scheduled jobs: POSTs to its /cron endpoints.
 
     python scripts/run_cron.py reroute-handoffs
     python scripts/run_cron.py consult-followups
 
-Needs PUBLIC_BASE_URL and CRON_SECRET. Uses only the standard library so the cron
-image needs no dependencies.
+Run by .github/workflows/cron.yml (free) or by a Render cron job (paid). Needs
+PUBLIC_BASE_URL and CRON_SECRET. Standard library only, so the runner needs no
+dependencies. A free Render service may be asleep and take about a minute to
+wake, hence the long timeout.
 """
 
 import json
@@ -20,9 +22,13 @@ def main() -> int:
     if job not in JOBS:
         print(f"usage: run_cron.py {{{'|'.join(sorted(JOBS))}}}", file=sys.stderr)
         return 2
-    url = os.environ["PUBLIC_BASE_URL"].rstrip("/") + f"/cron/{job}"
-    req = urllib.request.Request(url, method="POST", headers={"X-Cron-Secret": os.environ["CRON_SECRET"]})
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    base, secret = os.environ.get("PUBLIC_BASE_URL", ""), os.environ.get("CRON_SECRET", "")
+    if not base or not secret:
+        print("PUBLIC_BASE_URL / CRON_SECRET not set yet; skipping.")
+        return 0
+    url = base.rstrip("/") + f"/cron/{job}"
+    req = urllib.request.Request(url, method="POST", headers={"X-Cron-Secret": secret})
+    with urllib.request.urlopen(req, timeout=150) as resp:
         print(job, resp.status, json.loads(resp.read()))
     return 0
 
