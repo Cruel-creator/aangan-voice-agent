@@ -1,0 +1,14 @@
+{
+  "call_id": "call-uuid-1",
+  "caller_number": "+919822012345",
+  "started_at": "2026-09-03T05:20:00Z",
+  "ended_at": "2026-09-03T05:26:00Z",
+  "ended_reason": "caller_hangup",
+  "platform_cost_usd": 0.42,
+  "summary": "2BHK Wakad, wants full redesign by November.",
+  "messages": [
+    {"role": "agent", "text": "Hello, thank you for calling Aangan Studio."},
+    {"role": "caller", "text": "What would it roughly cost for a 2BHK?"},
+    {"role": "agent", "text": "Pricing depends on the site, the materials you choose, and the scope - your designer will walk you through it in detail at the consultation."}
+  ]
+}

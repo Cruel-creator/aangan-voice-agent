@@ -1,0 +1,141 @@
+# Aangan Studio — qualification rules
+# Source: qualified.md, services.md, pricing.md (Nikhil Deshpande).
+# Items marked PENDING_NIKHIL are working defaults until he signs off.
+# BACKEND ONLY. This file must never be loaded into the voice agent's prompt.
+
+timezone: Asia/Kolkata
+office_hours: { start: "10:00", end: "19:00" }
+
+# ---------- Criterion 1: real project (scope) ----------
+scope:
+  min_engagement: "single room with full design + execution"
+  decline_project_types: [restaurant, hotel, cafe, retail, shop, gym, fitness]
+  decline_service_types:
+    - advice_only          # "just ideas", "come and advise", colours/arrangement only
+    - styling_only
+    - self_execution       # "I'll do the execution myself"
+    - standalone_furniture_sourcing
+    - standalone_vastu
+    - structural_work      # moving walls, permits
+  commercial:
+    max_sqft: 3000
+    min_sqft: 500                  # PENDING_NIKHIL (from T18; not in services.md)
+    below_min_action: human_review # PENDING_NIKHIL: switch to "decline" once confirmed
+  advice_signals: ["just ideas", "suggestions", "advise", "advice", "just exploring",
+                   "colours", "rearrange", "do it myself", "execution myself"]
+
+# ---------- Criterion 2: service area ----------
+service_area:
+  allow:   # services.md list + common Pune/PCMC localities (extend with Nikhil)
+    - Kothrud
+    - Baner
+    - Aundh
+    - Wakad
+    - Koregaon Park
+    - Kalyani Nagar
+    - Viman Nagar
+    - Hadapsar
+    - Magarpatta
+    - NIBM
+    - Kondhwa
+    - Undri
+    - Shivane
+    - Warje
+    - Erandwane
+    - Deccan
+    - Kharadi
+    - Nanded City
+    - Balewadi
+    - Pashan
+    - Bavdhan
+    - Sus
+    - Wagholi
+    - Yerawada
+    - Camp
+    - Shivajinagar
+    - Sinhagad Road
+    - Katraj
+    - Bibwewadi
+    - Hinjewadi
+    - Pimpri
+    - Chinchwad
+    - Pimple Saudagar
+    - Pimple Nilakh
+    - Pimple Gurav
+    - Ravet
+    - Akurdi
+    - Nigdi
+    - Moshi
+    - Punawale
+    - Tathawade
+  deny: [Talegaon, Talegaon Dabhade, Lonavala, Nashik, Mumbai, Thane, Navi Mumbai,
+         Satara, Kolhapur, Lonikand]
+  unknown_action: ask_then_human_review   # one clarifying question, then human review
+  # Added in build: short forms callers use → canonical name above. Extend freely.
+  aliases:
+    KP: Koregaon Park
+    Kalyaninagar: Kalyani Nagar
+    Vimannagar: Viman Nagar
+    Sinhgad Road: Sinhagad Road
+    Shivaji Nagar: Shivajinagar
+  # Added in build: similarity (0–1) above which a misspelling counts as a match.
+  fuzzy_match_ratio: 0.85
+
+# ---------- Criterion 3: timeline ----------
+timeline:
+  # weeks from today until the caller needs the project COMPLETE
+  too_soon_below_weeks: 10   # PENDING_NIKHIL: design 3–4 wks + execution 8+ wks
+  tight_below_weeks: 14      # 10–14 weeks → qualified, flagged TIGHT
+  month_only_dates_resolve_to: end_of_month
+  never_decline_late_start: true   # PENDING_NIKHIL: late starts are scheduled, not declined
+  # Note: a possession date or move-out date is SITE AVAILABILITY, not a deadline.
+
+# ---------- Criterion 4: budget (only if volunteered) ----------
+budget:
+  # Floors from pricing.md (lowest tier). Used ONLY to detect "clearly below".
+  floors_inr:
+    residential_per_sqft: 1800
+    commercial_per_sqft: 1200
+    per_room: 350000           # kitchen counts as a room
+  clearly_below_ratio: 0.5     # PENDING_NIKHIL: flag only if budget < 50% of floor
+  # Floor selection: full home with known carpet area → area × per_sqft;
+  # partial / room-based → rooms × per_room; commercial → area × commercial_per_sqft.
+  # Use the LOWER of the applicable floors so borderline cases reach a designer.
+
+# ---------- Criterion 5: decision-maker ----------
+decision_maker:
+  never_declines_alone: true
+  note_if: [representative_only, unclear]
+  # Added in build (PENDING_NIKHIL): how extracted values map to the categories above.
+  # Fixtures: T14 "representative_owners_attending" → note; F05 "authorised_representative" → no note.
+  # Any value not listed here is treated as "unclear".
+  categories:
+    owner: owner
+    authorised_representative: owner
+    representative_only: representative_only
+    representative_owners_attending: representative_only
+    unclear: unclear
+
+# ---------- Routing ----------
+routing:
+  overflow_ring_seconds: 20         # office hours: front desk first, AI after 20s
+  dropped_call_resume_minutes: 15
+  dropped_call_callback_after_minutes: 2
+  handoff_ack_reroute_hours: 2      # unacknowledged Telegram handoff → studio head
+  human_review_callback: "within one working day"
+  urgent_escalation_callback_minutes: 15
+  urgent_escalation_contact: studio_head   # PENDING_NIKHIL: Nikhil or named person after hours
+  max_call_minutes: 8
+
+vip:
+  signals: ["friend of Nikhil", "Nikhil's friend", "knows Nikhil"]
+
+# ---------- Booking (added in build; all PENDING_NIKHIL) ----------
+booking:
+  horizon_days: 10
+  slots_to_offer: 3
+  slot_minutes: { studio: 60, site: 90 }
+  min_notice_hours: 18             # earliest slot offered is at least this far ahead
+  working_days: [mon, tue, wed, thu, fri]
+  site_visit_extra_days: [sat, sun]  # "weekend slots for site visits"
+  insert_retries: 1

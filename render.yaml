@@ -1,0 +1,62 @@
+# Validate before first deploy:  render blueprints validate   (Render CLI v2.7.0+)
+services:
+  - type: web
+    name: aangan-voice-agent
+    runtime: docker
+    region: singapore          # closest Render region to Pune
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    preDeployCommand: /srv/.venv/bin/python -m scripts.migrate   # applies db/migrations on Neon
+    envVars:
+      - { key: APP_ENV, value: production }
+      - { key: PUBLIC_BASE_URL, sync: false }
+      - { key: TOOL_WEBHOOK_SECRET, sync: false }    # paste the same value into the voice platform
+      - { key: DATABASE_URL, sync: false }           # Neon pooled string (-pooler host)
+      - { key: DATABASE_URL_UNPOOLED, sync: false }    # Neon direct string, used by migrations
+      - { key: PHONE_HASH_KEY, generateValue: true }
+      - { key: PHONE_ENCRYPTION_KEY, sync: false }   # Fernet key; generateValue is not Fernet-shaped
+      - { key: GOOGLE_SERVICE_ACCOUNT_JSON, sync: false }
+      - { key: TELEGRAM_BOT_TOKEN, sync: false }
+      - { key: TELEGRAM_WEBHOOK_SECRET, generateValue: true }
+      - { key: TELEGRAM_STUDIO_HEAD_CHAT_ID, sync: false }
+      - { key: TELEGRAM_FRONT_DESK_CHAT_ID, sync: false }
+      - { key: SMS_PROVIDER, value: console }
+      - { key: TWILIO_ACCOUNT_SID, sync: false }
+      - { key: TWILIO_AUTH_TOKEN, sync: false }
+      - { key: TWILIO_FROM_NUMBER, sync: false }
+      - { key: STUDIO_ADDRESS, sync: false }
+      - { key: PORTFOLIO_URL, sync: false }
+      - { key: DASHBOARD_USER, sync: false }
+      - { key: DASHBOARD_PASSWORD, sync: false }
+      - { key: CRON_SECRET, generateValue: true }
+      - { key: USD_INR_RATE, sync: false }
+      - { key: TELEPHONY_COST_INR_PER_MIN, sync: false }
+      - { key: FIXED_MONTHLY_COST_INR, sync: false }
+
+  - type: cron
+    name: aangan-reroute-handoffs
+    runtime: python
+    region: singapore
+    plan: starter
+    schedule: "*/15 * * * *"
+    buildCommand: "true"
+    startCommand: python scripts/run_cron.py reroute-handoffs
+    envVars:
+      - { key: PUBLIC_BASE_URL, sync: false }
+      - key: CRON_SECRET
+        fromService: { type: web, name: aangan-voice-agent, envVarKey: CRON_SECRET }
+
+  - type: cron
+    name: aangan-consult-followups
+    runtime: python
+    region: singapore
+    plan: starter
+    schedule: "0 * * * *"
+    buildCommand: "true"
+    startCommand: python scripts/run_cron.py consult-followups
+    envVars:
+      - { key: PUBLIC_BASE_URL, sync: false }
+      - key: CRON_SECRET
+        fromService: { type: web, name: aangan-voice-agent, envVarKey: CRON_SECRET }

@@ -1,0 +1,221 @@
+# Test fixtures derived from the September 2026 enquiry transcripts.
+# Two uses:
+#   1. Engine tests (tests/test_transcripts.py): feed `facts` to app/qualify/decision.py
+#      with `today` = call_date and assert `expected.outcome` and `expected.flags`.
+#   2. Simulated calls (tests/sim/): an LLM plays the caller using `caller_brief`;
+#      assert the agent reaches the same outcome and never speaks a price.
+#
+# Outcomes: QUALIFIED | DECLINE_SCOPE | DECLINE_AREA | DECLINE_TIMELINE |
+#           BUDGET_MISALIGNED | HUMAN_REVIEW | ESCALATE_URGENT | NOT_APPLICABLE
+# Flags:    TIGHT | VIP | RECOVERY | DECISION_NOTE | PRICING_ASKED | RESUMED_CALL
+#
+# Budget ranges use the LOWER bound. Month-only dates resolve to end of month.
+# Where a transcript never states a timeline, `flexible: true` assumes the caller
+# answers "no fixed deadline" when asked (marked `assumed`).
+
+cases:
+  - id: T01
+    call_date: 2026-09-02
+    caller_brief: "Priya, referred by Shruti Joshi. 3BHK Kothrud, 1,400 sq ft, full redesign. Done by March. Owner with husband, he approves."
+    facts: { intent: new, locality: Kothrud, property_type: apartment, project_category: residential,
+             rooms: [kitchen, living, bedroom, bedroom], area_sqft: 1400, service: design_and_execution,
+             completion: "March", flexible: false, budget_inr: null, decision_maker: owner }
+    expected: { outcome: QUALIFIED, flags: [] }
+
+  - id: T02
+    call_date: 2026-09-03
+    caller_brief: "2BHK Wakad, 950 sq ft, full redesign. Moving in November. Pushes twice for a ballpark price."
+    facts: { intent: new, locality: Wakad, property_type: apartment, project_category: residential,
+             rooms: [kitchen, living, bedroom, bedroom], area_sqft: 950, service: design_and_execution,
+             completion: "November", flexible: false, budget_inr: null, decision_maker: owner }
+    expected: { outcome: QUALIFIED, flags: [TIGHT, PRICING_ASKED] }
+    note: "Nov 30 is ~12.6 weeks from Sep 3 → tight, still books. Must not speak any price."
+
+  - id: T03
+    call_date: 2026-09-03
+    caller_brief: "Suresh Patil in Nashik. Home office and study redesign. Asks if a smaller project is possible."
+    facts: { intent: new, locality: Nashik, property_type: house, project_category: residential,
+             rooms: [study, office], service: design_and_execution, completion: null, flexible: true,
+             budget_inr: null, decision_maker: owner }
+    expected: { outcome: DECLINE_AREA, flags: [] }
+
+  - id: T04
+    call_date: 2026-09-04
+    caller_brief: "Wants someone to suggest colours and furniture arrangement for the living room. Not doing a full project."
+    facts: { intent: new, locality: null, property_type: apartment, project_category: residential,
+             rooms: [living], service: advice_only, completion: null, flexible: true,
+             budget_inr: null, decision_maker: owner }
+    expected: { outcome: DECLINE_SCOPE, flags: [] }
+    note: "Scope fail is decisive; do not ask for locality."
+
+  - id: T05
+    call_date: 2026-09-05
+    caller_brief: "Aarti Mehta, sent by Vikram Agarwal, a close friend of Nikhil. 4BHK Koregaon Park, 2,400 sq ft, complete redesign. Move back by February. Wants a site visit."
+    facts: { intent: new, locality: Koregaon Park, property_type: apartment, project_category: residential,
+             rooms: [kitchen, living, bedroom, bedroom, bedroom, bedroom], area_sqft: 2400,
+             service: design_and_execution, completion: "February 2027", flexible: false,
+             budget_inr: null, decision_maker: owner, referral_mentions_founder: true }
+    expected: { outcome: QUALIFIED, flags: [VIP] }
+
+  - id: T06
+    call_date: 2026-09-05
+    caller_brief: "Startup founder. 800 sq ft bare-shell office in Baner. 20 workstations, cabin, meeting room, break area. Operational by December."
+    facts: { intent: new, locality: Baner, property_type: office, project_category: commercial,
+             rooms: [workstations, cabin, meeting_room, break_area], area_sqft: 800,
+             service: design_and_execution, completion: "December", flexible: false,
+             budget_inr: null, decision_maker: owner }
+    expected: { outcome: QUALIFIED, flags: [] }
+
+  - id: T07
+    call_date: 2026-09-08
+    caller_brief: "Wants living room and kitchen redone before Diwali, about three weeks away. Asks about just the living room."
+    facts: { intent: new, locality: null, property_type: apartment, project_category: residential,
+             rooms: [living, kitchen], service: design_and_execution, completion: "in 3 weeks",
+             flexible: false, budget_inr: null, decision_maker: owner }
+    expected: { outcome: DECLINE_TIMELINE, flags: [] }
+    note: "Agent must offer a later (November) start and log as re-engage."
+
+  - id: T08
+    call_date: 2026-09-09
+    caller_brief: "Missed call at 10:47pm, Nanded City. No voicemail."
+    facts: { intent: unknown }
+    expected: { outcome: NOT_APPLICABLE, flags: [] }
+    note: "Routing test only: an after-hours call must be answered by the AI."
+
+  - id: T09
+    call_date: 2026-09-10
+    caller_brief: "Sheetal Deshpande, existing client, 2BHK Viman Nagar. Designer Aryan hasn't replied in five days. Angry; wants Nikhil or a senior person."
+    facts: { intent: existing_client_complaint }
+    expected: { outcome: ESCALATE_URGENT, flags: [] }
+    note: "No qualification questions at all."
+
+  - id: T10
+    call_date: 2026-09-11
+    caller_brief: "1BHK Kharadi, 550 sq ft. Kitchen and one bedroom. Volunteers budget of 1 to 1.5 lakh maximum."
+    facts: { intent: new, locality: Kharadi, property_type: apartment, project_category: residential,
+             rooms: [kitchen, bedroom], area_sqft: 550, service: design_and_execution,
+             completion: null, flexible: true, budget_inr: 100000, decision_maker: owner }
+    expected: { outcome: BUDGET_MISALIGNED, flags: [] }
+    note: "Lower floor = 2 rooms × room floor. Budget is far below half of it. Agent states no figure."
+
+  - id: T11
+    call_date: 2026-09-12
+    caller_brief: "Rented 2BHK in Baner, 3-year lease. Living room, bedroom, kitchen. No structural changes; landlord OK."
+    facts: { intent: new, locality: Baner, property_type: apartment, project_category: residential,
+             rooms: [living, bedroom, kitchen], service: design_and_execution, tenure: rented,
+             completion: null, flexible: true, budget_inr: null, decision_maker: owner }
+    expected: { outcome: QUALIFIED, flags: [] }
+    assumed: [flexible]
+
+  - id: T12
+    call_date: 2026-09-15
+    caller_brief: "Anand Sharma. New 5,500 sq ft villa, Kalyani Nagar, ground plus two floors. Full end-to-end. Move in March. Wants principal designer on site."
+    facts: { intent: new, locality: Kalyani Nagar, property_type: villa, project_category: residential,
+             rooms: [full_home], area_sqft: 5500, service: design_and_execution,
+             completion: "March 2027", flexible: false, budget_inr: null, decision_maker: owner }
+    expected: { outcome: QUALIFIED, flags: [] }
+    note: "3,000 sq ft cap applies to commercial only."
+
+  - id: T13
+    call_date: 2026-09-16
+    caller_brief: "3BHK Aundh, 1,100 sq ft. Kitchen, wardrobes, living room. Asks for a rough range twice."
+    facts: { intent: new, locality: Aundh, property_type: apartment, project_category: residential,
+             rooms: [kitchen, bedroom, bedroom, living], area_sqft: 1100, service: design_and_execution,
+             completion: null, flexible: true, budget_inr: null, decision_maker: owner }
+    expected: { outcome: QUALIFIED, flags: [PRICING_ASKED] }
+    assumed: [flexible]
+
+  - id: T14
+    call_date: 2026-09-17
+    caller_brief: "Son calling for parents' new 3BHK in Hadapsar. Parents will attend consultation and decide."
+    facts: { intent: new, locality: Hadapsar, property_type: apartment, project_category: residential,
+             rooms: [full_home], service: design_and_execution, completion: null, flexible: true,
+             budget_inr: null, decision_maker: representative_owners_attending }
+    expected: { outcome: QUALIFIED, flags: [DECISION_NOTE] }
+    assumed: [flexible]
+
+  - id: T15
+    call_date: 2026-09-18
+    caller_brief: "Smita. Possession of 2BHK in Undri in about six weeks, 875 sq ft. Full home. Wants to start design now."
+    facts: { intent: new, locality: Undri, property_type: apartment, project_category: residential,
+             rooms: [kitchen, bedroom, bedroom, living], area_sqft: 875, service: design_and_execution,
+             site_available: "in 6 weeks", completion: null, flexible: true,
+             budget_inr: null, decision_maker: owner }
+    expected: { outcome: QUALIFIED, flags: [] }
+    note: "Possession is site availability, not a completion deadline."
+
+  - id: T16
+    call_date: 2026-09-19
+    caller_brief: "Girish Nair. Called Monday about 3BHK Viman Nagar, nobody called back. Frustrated."
+    facts: { intent: follow_up, prior_enquiry_found: true, locality: Viman Nagar, property_type: apartment,
+             project_category: residential, rooms: [full_home], service: design_and_execution,
+             completion: null, flexible: true, budget_inr: null, decision_maker: owner }
+    expected: { outcome: QUALIFIED, flags: [RECOVERY] }
+    assumed: [flexible]
+
+  - id: T17
+    call_date: 2026-09-22
+    caller_brief: "Ritu Kapoor. First call drops after a minute; calls back 2 minutes later. 3BHK Pimple Saudagar, 1,050 sq ft. Kitchen, wardrobes, living. Done by March."
+    facts: { intent: new, locality: Pimple Saudagar, property_type: apartment, project_category: residential,
+             rooms: [kitchen, bedroom, bedroom, living], area_sqft: 1050, service: design_and_execution,
+             completion: "March 2027", flexible: false, budget_inr: null, decision_maker: owner }
+    expected: { outcome: QUALIFIED, flags: [RESUMED_CALL] }
+
+  - id: T18
+    call_date: 2026-09-23
+    caller_brief: "Runs a coworking space. 180 sq ft pod: lighting, desk, storage."
+    facts: { intent: new, locality: null, property_type: office, project_category: commercial,
+             rooms: [pod], area_sqft: 180, service: design_and_execution, completion: null,
+             flexible: true, budget_inr: null, decision_maker: owner }
+    expected: { outcome: HUMAN_REVIEW, flags: [] }
+    note: "Commercial minimum is PENDING_NIKHIL. Becomes DECLINE_SCOPE once confirmed."
+
+  - id: T19
+    call_date: 2026-09-24
+    caller_brief: "Opening a restaurant in Koregaon Park; wants interiors. Asks for a referral."
+    facts: { intent: new, locality: Koregaon Park, property_type: restaurant, project_category: hospitality,
+             service: design_and_execution, completion: null, flexible: true,
+             budget_inr: null, decision_maker: owner }
+    expected: { outcome: DECLINE_SCOPE, flags: [] }
+    note: "No invented referrals."
+
+  - id: T20
+    call_date: 2026-09-25
+    caller_brief: "Pooja. 2BHK Magarpatta, 900 sq ft. Kitchen, both bedrooms, living. January execution start ideal. Both owners attending."
+    facts: { intent: new, locality: Magarpatta, property_type: apartment, project_category: residential,
+             rooms: [kitchen, bedroom, bedroom, living], area_sqft: 900, service: design_and_execution,
+             completion: null, flexible: true, budget_inr: null, decision_maker: owner }
+    expected: { outcome: QUALIFIED, flags: [] }
+
+  # ---- Extra engine tests from web-form records (not phone, but exercise the rules) ----
+  - id: F03
+    call_date: 2026-09-06
+    facts: { intent: new, locality: Talegaon Dabhade, property_type: house, project_category: residential,
+             rooms: [full_home], area_sqft: 1400, service: design_and_execution,
+             completion: null, flexible: true, budget_inr: 1500000, decision_maker: owner }
+    expected: { outcome: DECLINE_AREA, flags: [] }
+
+  - id: F05
+    call_date: 2026-09-11
+    facts: { intent: new, locality: Hinjewadi, property_type: office, project_category: commercial,
+             rooms: [workstations, cabin, boardroom, meeting_room, lounge, pantry], area_sqft: 2200,
+             service: design_and_execution, completion: "2027-01-15", flexible: false,
+             budget_inr: 6000000, decision_maker: authorised_representative }
+    expected: { outcome: QUALIFIED, flags: [] }
+
+  - id: F06
+    call_date: 2026-09-14
+    facts: { intent: new, locality: NIBM, property_type: apartment, project_category: residential,
+             rooms: [kitchen, bedroom, bedroom, bedroom, living, study], area_sqft: 1950,
+             service: design_and_execution, site_available: "2027-02", completion: null,
+             flexible: true, budget_inr: 3500000, decision_maker: owner }
+    expected: { outcome: QUALIFIED, flags: [] }
+    note: "Late start must not be declined. Budget is inside the standard range."
+
+  - id: F08
+    call_date: 2026-09-18
+    facts: { intent: new, locality: Wakad, property_type: apartment, project_category: residential,
+             rooms: [living, kitchen], area_sqft: 875, service: design_and_execution,
+             completion: "in 3 weeks", flexible: false, budget_inr: 400000, decision_maker: owner }
+    expected: { outcome: DECLINE_TIMELINE, flags: [] }
+    note: "Budget alone would pass (not clearly below); timeline fails."

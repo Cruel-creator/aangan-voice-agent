@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aangan Call Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root { --bg:#f7f6f3; --card:#fff; --ink:#1f2328; --muted:#6b7280; --line:#e5e7eb; --accent:#2f6f5e; --warn:#b4472a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141517; --card:#1d1f22; --ink:#e8e8e8; --muted:#9ca3af; --line:#2c2f33; --accent:#6fc2a8; --warn:#f08a6b; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding:20px 16px 8px; max-width:1100px; margin:auto; display:flex; flex-wrap:wrap; gap:12px; align-items:end; justify-content:space-between; }
+  h1 { font-size:22px; margin:0; }
+  h2 { font-size:15px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:28px 0 10px; }
+  main { max-width:1100px; margin:auto; padding:0 16px 40px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:10px; }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .tile b { display:block; font-size:24px; font-variant-numeric:tabular-nums; }
+  .tile span { color:var(--muted); font-size:13px; }
+  .tile.warn b { color:var(--warn); }
+  .chart { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; height:260px; }
+  form { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  input, button { font:inherit; padding:6px 8px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
+  button { background:var(--accent); color:#fff; border:0; cursor:pointer; }
+  .na { color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Aangan Studio · calls</h1>
+  <form id="range">
+    <label>From <input type="date" id="start"></label>
+    <label>To <input type="date" id="end"></label>
+    <button>Apply</button>
+  </form>
+</header>
+<main>
+  <h2>Speed</h2><div class="grid" id="speed"></div>
+  <h2>Funnel</h2><div class="chart"><canvas id="funnel"></canvas></div>
+  <h2>Decline reasons</h2><div class="chart"><canvas id="declines"></canvas></div>
+  <h2>Quality</h2><div class="grid" id="quality"></div>
+  <h2>Cost and value</h2><div class="grid" id="cost"></div>
+</main>
+<script>
+const fmt = (v, unit = "") => v === null || v === undefined ? '<span class="na">no data</span>' :
+  (typeof v === "number" ? v.toLocaleString("en-IN") : v) + unit;
+function tiles(el, items) {
+  document.getElementById(el).innerHTML = items.map(([label, v, unit, warn]) =>
+    `<div class="tile${warn && v ? " warn" : ""}"><b>${fmt(v, unit)}</b><span>${label}</span></div>`).join("");
+}
+let charts = {};
+function bar(id, labels, data) {
+  charts[id]?.destroy();
+  const color = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+  charts[id] = new Chart(document.getElementById(id), {
+    type: "bar", data: { labels, datasets: [{ data, backgroundColor: color }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
+               scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } });
+}
+async function load() {
+  const q = new URLSearchParams({ start: start.value, end: end.value });
+  const m = await (await fetch("dashboard/api/metrics?" + q)).json();
+  tiles("speed", [["% answered under 5 min", m.speed.pct_answered_under_5_min, "%"],
+    ["median pickup", m.speed.median_pickup_seconds, " s"],
+    ["after-hours share", m.speed.after_hours_share_pct, "%"],
+    ["median time to designer ack", m.speed.median_minutes_to_designer_ack, " min"]]);
+  const f = m.funnel;
+  bar("funnel", ["calls", "enquiries", "qualified", "booked", "held", "won"],
+      [f.calls, f.enquiries, f.qualified, f.booked, f.held, f.won]);
+  const d = m.declines, keys = ["DECLINE_SCOPE", "DECLINE_AREA", "DECLINE_TIMELINE", "BUDGET_MISALIGNED"];
+  bar("declines", ["scope", "area", "timeline", "budget"], keys.map(k => d[k] || 0));
+  const ql = m.quality;
+  tiles("quality", [["human-review rate", ql.human_review_rate_pct, "%"],
+    ["urgent escalations", ql.escalations], ["transfers", ql.transfers],
+    ["price-leak flags", ql.price_leak_flags, "", true], ["calls never logged by agent", ql.unlogged_calls, "", true],
+    [`audit agreement (${ql.audits} audited)`, ql.audit_agreement_pct, "%"]]);
+  const c = m.cost;
+  tiles("cost", [["monthly cost (INR)", c.monthly_inr], ["cost per call (INR)", c.per_call_inr],
+    ["cost per booked consultation (INR)", c.per_booked_consultation_inr],
+    ["win rate", c.win_rate_pct, "%"], ["avg project value (INR)", c.avg_project_value_inr],
+    ["pipeline value (INR)", c.pipeline_value_inr]]);
+}
+const today = new Date(), from = new Date(today - 30 * 864e5);
+end.value = today.toISOString().slice(0, 10); start.value = from.toISOString().slice(0, 10);
+document.getElementById("range").addEventListener("submit", e => { e.preventDefault(); load(); });
+load();
+</script>
+</body>
+</html>
