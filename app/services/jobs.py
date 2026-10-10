@@ -71,14 +71,20 @@ def process_end_of_call(crm: CRM, report: EndOfCallReport) -> CallRecord:
     booked = any(lead.status == "booked" for lead in leads)
     handed_off = bool(crm.handoffs_for_leads([lead.id for lead in leads if lead.id]))
     if (call.outcome == "QUALIFIED" or booked) and not handed_off:
-        telegram.alert_front_desk(
-            f"Qualified call with NO designer handoff - please follow up.\nCall: {call.transcript_url}"
-        )
+        _alert(f"Qualified call with NO designer handoff - please follow up.\nCall: {call.transcript_url}")
     if leaks:
-        telegram.alert_front_desk(f"Possible price mention by the AI - review: {call.transcript_url}")
+        _alert(f"Possible price mention by the AI - review: {call.transcript_url}")
     if call.outcome is None:
         log.warning("call %s ended without log_call", call.platform_call_id)
     return call
+
+
+def _alert(text: str) -> None:
+    """Front-desk alert. A failed alert must never lose the call log it is about."""
+    try:
+        telegram.alert_front_desk(text)
+    except Exception:
+        log.exception("front desk alert failed: %s", text.splitlines()[0])
 
 
 def _render_transcript(report: EndOfCallReport) -> str | None:

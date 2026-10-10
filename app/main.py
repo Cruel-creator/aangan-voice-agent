@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 from app import demo
 from app.config import get_rules, get_settings
 from app.dashboard import metrics
-from app.platform import vaani, webhooks
+from app.platform import vaani, vaani_sync, webhooks
 from app.services import clock, email, jobs, notify, telegram
 from app.services.crm import Audit, get_crm, is_uuid
 from app.tools.handlers import TOOLS
@@ -179,6 +179,11 @@ def cron_reroute() -> dict:
     return {"rerouted": jobs.reroute_unacked_handoffs(get_crm(), clock.now())}
 
 
+@app.post("/cron/vaani-sync", dependencies=[Depends(_cron_auth)])
+def cron_vaani_sync() -> dict:
+    return vaani_sync.sync(get_crm(), pages=4)
+
+
 @app.post("/cron/consult-followups", dependencies=[Depends(_cron_auth)])
 def cron_followups() -> dict:
     return {"sent": jobs.send_consult_followups(get_crm(), clock.now())}
@@ -230,11 +235,13 @@ def _window(start: date | None, end: date | None) -> tuple[datetime, datetime]:
 
 @app.get("/dashboard/api/metrics")
 def dashboard_metrics(start: date | None = None, end: date | None = None, include_demo: bool = False) -> dict:
+    vaani_sync.maybe_sync(get_crm())  # new phone calls appear as soon as the dashboard is opened
     return metrics.compute(get_crm(), *_window(start, end), include_demo=include_demo)
 
 
 @app.get("/dashboard/api/calls")
 def dashboard_calls(start: date | None = None, end: date | None = None, include_demo: bool = False) -> dict:
+    vaani_sync.maybe_sync(get_crm())
     return {"calls": metrics.recent_calls(get_crm(), *_window(start, end), include_demo=include_demo)}
 
 

@@ -2,6 +2,7 @@
 
     python scripts/run_cron.py reroute-handoffs
     python scripts/run_cron.py consult-followups
+    python scripts/run_cron.py vaani-sync
 
 Run by .github/workflows/cron.yml. Needs PUBLIC_BASE_URL and CRON_SECRET.
 Standard library only, so the runner needs no dependencies. A serverless host may
@@ -13,7 +14,7 @@ import os
 import sys
 import urllib.request
 
-JOBS = {"reroute-handoffs", "consult-followups"}
+JOBS = {"reroute-handoffs", "consult-followups", "vaani-sync"}
 
 
 def main() -> int:

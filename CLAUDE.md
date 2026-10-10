@@ -82,6 +82,7 @@ app/
   services/
     calendar.py  telegram.py  sms.py  crm.py  cost.py
   platform/webhooks.py    neutral tool-call + end-of-call contract, shared-secret auth
+  platform/vaani_sync.py  pulls finished Vaani calls into the dashboard; outcome re-decided in code
   demo.py                 website receptionist demo (Gemini or Claude + the same tools, demo mode)
   dashboard/metrics.py    dashboard numbers
   web/                    public pages: / (receptionist), /dashboard, /dashboard/calls/{id}

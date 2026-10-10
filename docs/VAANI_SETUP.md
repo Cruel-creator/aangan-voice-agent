@@ -110,6 +110,16 @@ about Lonavala got a Hindi decline (Pune and PCMC only). Fixed in the prompt aft
 test: a Hinglish message got an English reply, "March 2027" became "Monday 1 March",
 and a 9 AM time (before office hours) was offered.
 
+## Dashboard link (`app/platform/vaani_sync.py`)
+
+Vaani webhooks are off on this plan, so the backend pulls calls from Vaani's API
+(`GET /api/call-history`, header `X-API-Key`) when the dashboard is opened (at most once a
+minute) and every 15 minutes from GitHub Actions (`/cron/vaani-sync`). Needs
+`VAANI_API_KEY` and `VAANI_AGENT_ID` on Vercel. Each finished call of this agent is logged
+(price-leak scan included), the extracted facts are re-run through the qualification
+engine in code (the dashboard outcome; `AGENT_MISMATCH` if Riya's tag disagrees), a lead
+is stored, and the studio head gets a private call-back request with the caller's number.
+
 ## Known limits (Vaani, as tested on 2026-10-10)
 
 - Custom tools receive only the extracted parameters: no call id or caller number, and

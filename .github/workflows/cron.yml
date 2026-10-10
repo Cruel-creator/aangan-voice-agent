@@ -6,14 +6,14 @@ name: scheduled-jobs
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # re-route unacknowledged handoffs
+    - cron: "*/15 * * * *"   # import Vaani calls (+ call-back notices), re-route unacknowledged handoffs
     - cron: "0 * * * *"      # post-consultation follow-ups
   workflow_dispatch:
     inputs:
       job:
         description: Job to run now
         type: choice
-        options: [reroute-handoffs, consult-followups]
+        options: [vaani-sync, reroute-handoffs, consult-followups]
 
 permissions: {}
 
@@ -35,5 +35,6 @@ jobs:
           elif [ "$SCHEDULE" = "0 * * * *" ]; then
             python3 scripts/run_cron.py consult-followups   # the */15 run covers re-routing at :00
           else
+            python3 scripts/run_cron.py vaani-sync || true   # a Vaani outage must not block re-routing
             python3 scripts/run_cron.py reroute-handoffs
           fi

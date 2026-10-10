@@ -161,6 +161,10 @@ class Settings(BaseSettings):
     email_from: str = "Aangan Studio <onboarding@resend.dev>"
     studio_head_email: str = ""
 
+    # Vaani (phone agent): the dashboard pulls its calls through Vaani's API
+    vaani_api_key: str = ""
+    vaani_agent_id: str = ""  # only this agent's calls are imported (blank: all agents)
+
     # SMS
     sms_provider: Literal["console", "twilio"] = "console"
     twilio_account_sid: str = ""
@@ -189,7 +193,7 @@ class Settings(BaseSettings):
     demo_daily_turn_limit: int = 300  # visitor messages per day across the whole site
     demo_session_turn_limit: int = 30  # visitor messages per conversation
 
-    @field_validator("gemini_api_key", "anthropic_api_key", "resend_api_key", mode="before")
+    @field_validator("gemini_api_key", "anthropic_api_key", "resend_api_key", "vaani_api_key", mode="before")
     @classmethod
     def _clean_key(cls, v: object) -> object:
         # Keys pasted or piped on Windows can carry a byte-order mark or a newline, which
