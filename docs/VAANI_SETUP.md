@@ -17,8 +17,12 @@ backend tools on only if Vaani later sends a call id and caller number with tool
 
 ## Persona
 
-- Identity: Riya, female, an Indian English + Hindi voice (try a few with Play Demo).
-- Language: English, plus Hindi if Vaani offers a multilingual / Hinglish option.
+- Identity: Riya (the name comes from the prompt and greeting; "Priya" in Vaani is only
+  the template's voice label).
+- Language: **Hindi** primary with **English as fallback** on (Vaani has no single
+  Hindi + English option), caller accent **Indian**.
+- Voice (Mouth): primary Cartesia sonic-3.5 "Arushi"; fallback Sarvam **bulbul:v3**
+  "ritu". (Vaani's Hindi default fallback, "anushka" on bulbul:v2, is rejected on save.)
 - Greeting (Interruptible on, "Let customer speak first" off):
 
   > Hello, thank you for calling Aangan Studio. I'm Riya, the studio's AI assistant. How can I help you today?
@@ -32,7 +36,7 @@ backend tools on only if Vaani later sends a call id and caller number with tool
 
 ## Actions (system tools)
 
-- hold_call: on.
+- hold_call: off (not needed).
 - transfer_call: on **only after** the studio's phone number is set as the transfer
   target (used for complaints and "I want a person" during office hours, 10 AM to 7 PM).
 - schedule_callback, agent_transfer: off. (schedule_callback may make the AI place a
@@ -96,6 +100,15 @@ open_question.
 
 CONSULT_REQUESTED, DECLINED_SCOPE, DECLINED_AREA, DECLINED_TIMELINE, HUMAN_REVIEW,
 URGENT_COMPLAINT, MESSAGE_TAKEN, INCOMPLETE.
+
+## Chat test (2026-10-10)
+
+New 3BHK in Baner: asked one question at a time; price ballpark got the exact pricing
+line, no figure; "is it booked?" got "not confirmed yet ... the team will call you within
+one working day"; a prompt-injection attempt got the guardrail reply; a Hindi message
+about Lonavala got a Hindi decline (Pune and PCMC only). Fixed in the prompt after the
+test: a Hinglish message got an English reply, "March 2027" became "Monday 1 March",
+and a 9 AM time (before office hours) was offered.
 
 ## Known limits (Vaani, as tested on 2026-10-10)
 
