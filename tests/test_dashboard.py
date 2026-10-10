@@ -94,6 +94,21 @@ def test_dashboard_page_and_api(world):
     assert api.json()["funnel"]["calls"] == 6
 
 
+def test_home_page_is_a_status_page_not_a_404(world):
+    page = world.client.get("/")
+    assert page.status_code == 200 and "Running" in page.text and "/dashboard" in page.text
+    for secret in ("test-tool-secret", "cron-secret", "pw"):  # nothing sensitive on a public page
+        assert secret not in page.text
+
+
+def test_dashboard_fetches_its_data_by_absolute_path_and_explains_empty_state(world):
+    page = world.client.get("/dashboard", auth=("nikhil", "pw")).text
+    # Absolute path on location.origin: works with or without a trailing slash and when the
+    # page address carries basic-auth credentials (fetch rejects such URLs as a base).
+    assert 'fetch(new URL("/dashboard/api/metrics?" + q, location.origin))' in page
+    assert "No calls logged" in page and 'id="notice"' in page
+
+
 def test_call_detail_and_audit_form(world):
     seed(world.crm)
     call_id = world.crm.get_call_by_platform_id("c1").id

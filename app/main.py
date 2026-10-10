@@ -40,6 +40,21 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def home() -> str:
+    """Status page so the bare address isn't a confusing 404. Shows nothing sensitive."""
+    return (
+        "<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,"
+        "initial-scale=1'><title>Aangan voice agent</title>"
+        "<body style='font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:48px auto;padding:0 16px'>"
+        "<h1 style='font-size:22px'>Aangan Studio · voice agent backend</h1>"
+        "<p><span style='color:#2f6f5e'>&#9679;</span> Running.</p>"
+        "<p>This server answers the AI phone agent's tool calls. It has no pages for callers.</p>"
+        "<p><a href='/dashboard'>Open the dashboard</a> (login required)</p>"
+        "</body>"
+    )
+
+
 # ---------- agent tools (contract: docs/PLATFORM_API.md) ----------
 @app.post("/tools/{name}", dependencies=[Depends(webhooks.verify_secret)])
 def tool_endpoint(name: str, body: webhooks.ToolRequest) -> JSONResponse:

@@ -24,6 +24,9 @@
   input, button { font:inherit; padding:6px 8px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
   button { background:var(--accent); color:#fff; border:0; cursor:pointer; }
   .na { color:var(--muted); }
+  .notice { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:10px; padding:12px 14px; margin-top:16px; }
+  .notice.error { border-left-color:var(--warn); }
+  .notice:empty { display:none; }
 </style>
 </head>
 <body>
@@ -36,6 +39,7 @@
   </form>
 </header>
 <main>
+  <div id="notice" class="notice" role="status"></div>
   <h2>Speed</h2><div class="grid" id="speed"></div>
   <h2>Funnel</h2><div class="chart"><canvas id="funnel"></canvas></div>
   <h2>Decline reasons</h2><div class="chart"><canvas id="declines"></canvas></div>
@@ -58,9 +62,26 @@ function bar(id, labels, data) {
     options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } });
 }
+function notice(text, isError) {
+  const el = document.getElementById("notice");
+  el.textContent = text || "";
+  el.className = "notice" + (isError ? " error" : "");
+}
 async function load() {
   const q = new URLSearchParams({ start: start.value, end: end.value });
-  const m = await (await fetch("dashboard/api/metrics?" + q)).json();
+  let m;
+  try {
+    // Build from location.origin: it never contains credentials, so fetch() always accepts it.
+    const resp = await fetch(new URL("/dashboard/api/metrics?" + q, location.origin));
+    if (!resp.ok) throw new Error(`the server answered ${resp.status}`);
+    m = await resp.json();
+  } catch (err) {
+    notice(`Couldn't load the numbers (${err.message}). Refresh the page; if it keeps happening, check the deployment logs.`, true);
+    return;
+  }
+  notice(m.funnel.calls === 0
+    ? "No calls logged in this date range yet. The numbers fill in after the voice agent handles its first call."
+    : "");
   tiles("speed", [["% answered under 5 min", m.speed.pct_answered_under_5_min, "%"],
     ["median pickup", m.speed.median_pickup_seconds, " s"],
     ["after-hours share", m.speed.after_hours_share_pct, "%"],
