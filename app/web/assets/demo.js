@@ -40,7 +40,11 @@
     $("typing")?.remove();
     if (on) { log.append(el("div", { class: "msg agent typing", id: "typing", "aria-label": "Receptionist is typing" }, el("i"), el("i"), el("i"))); log.scrollTop = log.scrollHeight; }
   }
-  function setStatus(text) { statusEl.textContent = text; }
+  const VOICE_STATE = { "Listening…": "listening", "Speaking…": "speaking", "Thinking…": "thinking" };
+  function setStatus(text) {
+    statusEl.textContent = text;
+    document.body.dataset.voice = VOICE_STATE[text] || ""; // drives the voice meter in home.css
+  }
   function setBusy(b) {
     state.busy = b;
     input.disabled = b || !state.enabled;
@@ -172,7 +176,7 @@
     onclick: () => {
       if (lang !== state.lang) $("lang").querySelector(`[data-lang="${lang}"]`).click();
       send(text);
-      if (window.matchMedia("(max-width: 900px)").matches) $("log").scrollIntoView({ behavior: "smooth", block: "center" });
+      if (window.matchMedia("(max-width: 960px)").matches) window.Motion?.scrollTo("#chat");
     },
   }, el("span", { text }), el("small", { text: lang === "hi" ? "Hindi" : "English" }))));
 

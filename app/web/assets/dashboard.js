@@ -1,6 +1,7 @@
 // Dashboard: metrics, charts and recent calls. Public page; data comes from /dashboard/api/*.
 (() => {
   const $ = (id) => document.getElementById(id);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
   const startEl = $("start"), endEl = $("end"), demoEl = $("demo");
   const charts = {};
 
@@ -83,12 +84,18 @@
       : "");
 
     const rate = (a, b) => (b ? `${Math.round((100 * a) / b)}% of enquiries` : "—");
-    $("kpis").replaceChildren(
-      kpi("Calls", fmt(f.calls), `${fmt(f.enquiries)} were project enquiries`, 0),
-      kpi("Qualified", fmt(f.qualified), rate(f.qualified, f.enquiries), 1),
-      kpi("Consultations booked", fmt(f.booked), `${fmt(f.held)} held · ${fmt(f.won)} won`, 2),
-      kpi("Cost per call", m.cost.per_call_inr === null ? "—" : `₹${fmt(m.cost.per_call_inr)}`, `₹${fmt(m.cost.monthly_inr)} a month`, 3),
-    );
+    const kpiValues = [
+      ["Calls", f.calls, `${fmt(f.enquiries)} were project enquiries`, {}],
+      ["Qualified", f.qualified, rate(f.qualified, f.enquiries), {}],
+      ["Consultations booked", f.booked, `${fmt(f.held)} held · ${fmt(f.won)} won`, {}],
+      ["Cost per call", m.cost.per_call_inr, `₹${fmt(m.cost.monthly_inr)} a month`, { prefix: "₹", decimals: 2 }],
+    ];
+    $("kpis").replaceChildren(...kpiValues.map(([label, , sub], i) => kpi(label, "0", sub, i)));
+    $$("#kpis .num").forEach((n, i) => {
+      const [, v, , opts] = kpiValues[i];
+      if (window.Motion?.countUp) Motion.countUp(n, v, { duration: 1.2, ...opts });
+      else n.textContent = v === null ? "—" : (opts.prefix || "") + fmt(v);
+    });
 
     bar("funnel", ["Calls", "Enquiries", "Qualified", "Booked", "Held", "Won"], [f.calls, f.enquiries, f.qualified, f.booked, f.held, f.won]);
     const d = m.declines;
@@ -120,6 +127,29 @@
       ["Pipeline value", c.pipeline_value_inr],
     ]);
     revealOnScroll();
+    entrance();
+  }
+
+  // First load: the page assembles itself; later refreshes just settle in.
+  let entered = false;
+  function entrance() {
+    const M = window.Motion;
+    if (!M?.hasGsap || M.reduce) return;
+    const rows = $$("#calls tr");
+    if (!entered) {
+      entered = true;
+      gsap.timeline({ defaults: { ease: "expo.out" } })
+        .from(".head > div > *", { autoAlpha: 0, y: 16, duration: 0.9, stagger: 0.07 })
+        .from(".controls > *", { autoAlpha: 0, y: 10, duration: 0.7, stagger: 0.05 }, 0.15)
+        .from("#kpis .kpi", { autoAlpha: 0, y: 34, duration: 1.1, stagger: 0.08, clearProps: "transform" }, 0.2)
+        .from(".chart-card", { autoAlpha: 0, y: 34, duration: 1.1, stagger: 0.1, clearProps: "transform" }, 0.35);
+    } else {
+      gsap.from("#kpis .kpi", { autoAlpha: 0.4, y: 8, duration: 0.5, stagger: 0.04, ease: "power2.out", clearProps: "transform" });
+    }
+    if (rows.length && window.ScrollTrigger) {
+      gsap.from(rows, { autoAlpha: 0, x: -12, duration: 0.7, stagger: 0.04, ease: "power3.out",
+        scrollTrigger: { trigger: "#calls", start: "top 92%", once: true } });
+    }
   }
 
   $("range").addEventListener("submit", (e) => { e.preventDefault(); load(); });

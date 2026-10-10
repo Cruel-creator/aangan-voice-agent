@@ -98,6 +98,17 @@ def cron_followups() -> dict:
 app.mount("/assets", StaticFiles(directory=WEB / "assets"), name="assets")
 
 
+@app.middleware("http")
+async def revalidate_site_files(request: Request, call_next):
+    """Pages and their scripts must always match after a deploy: browsers keep a copy but
+    revalidate it (a cheap 304 when unchanged) instead of running a stale script."""
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/assets/") or path in ("/", "/dashboard") or path.startswith("/dashboard/calls/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 def _page(name: str) -> FileResponse:
     return FileResponse(WEB / name, media_type="text/html")
 

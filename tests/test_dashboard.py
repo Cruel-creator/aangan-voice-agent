@@ -153,3 +153,20 @@ def test_audit_can_be_saved_and_is_listed(world):
     assert resp.status_code == 200
     audits = world.client.get(f"/dashboard/api/calls/{call_id}").json()["audits"]
     assert {"agrees": False, "notes": "asked budget", "auditor": "Nikhil"}.items() <= audits[-1].items()
+
+
+def test_site_files_revalidate_and_libraries_are_pinned(world):
+    for path in ("/", "/dashboard", "/assets/motion.js", "/assets/home.js"):
+        assert world.client.get(path).headers.get("cache-control") == "no-cache", path
+    assert "cache-control" not in world.client.get("/health").headers  # APIs unaffected
+    page = world.client.get("/").text
+    for lib in (
+        "gsap@3.15/dist/gsap.min.js",
+        "gsap@3.15/dist/ScrollTrigger.min.js",
+        "gsap@3.15/dist/SplitText.min.js",
+        "lenis@1.3.26/dist/lenis.min.js",
+        "three.js/r134/three.min.js",
+        "vanta@0.5.24/dist/vanta.fog.min.js",
+    ):
+        assert lib in page, lib
+    assert "data-lenis-prevent" in page  # the chat log keeps native scrolling
