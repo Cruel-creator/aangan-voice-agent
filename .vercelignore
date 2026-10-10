@@ -1,0 +1,12 @@
+# Never upload local secrets or tooling state to Vercel.
+.env
+.env.*
+!.env.example
+.neon
+.venv
+.vercel
+.pytest_cache
+.ruff_cache
+__pycache__
+agent_config.json
+sim_report.md
