@@ -1,23 +1,25 @@
 from __future__ import annotations
 
 import hmac
-import html
 import logging
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from pydantic import BaseModel, ValidationError
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field, ValidationError
 
+from app import demo
 from app.config import get_rules, get_settings
 from app.dashboard import metrics
 from app.platform import webhooks
 from app.services import clock, jobs, telegram
 from app.services.crm import Audit, get_crm, is_uuid
 from app.tools.handlers import TOOLS
+
+WEB = Path(__file__).parent / "web"
 
 log = logging.getLogger("app")
 
@@ -38,21 +40,6 @@ def _same(a: str | None, b: str) -> bool:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
-
-
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
-def home() -> str:
-    """Status page so the bare address isn't a confusing 404. Shows nothing sensitive."""
-    return (
-        "<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,"
-        "initial-scale=1'><title>Aangan voice agent</title>"
-        "<body style='font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:48px auto;padding:0 16px'>"
-        "<h1 style='font-size:22px'>Aangan Studio · voice agent backend</h1>"
-        "<p><span style='color:#2f6f5e'>&#9679;</span> Running.</p>"
-        "<p>This server answers the AI phone agent's tool calls. It has no pages for callers.</p>"
-        "<p><a href='/dashboard'>Open the dashboard</a> (login required)</p>"
-        "</body>"
-    )
 
 
 # ---------- agent tools (contract: docs/PLATFORM_API.md) ----------
@@ -107,78 +94,128 @@ def cron_followups() -> dict:
     return {"sent": jobs.send_consult_followups(get_crm(), clock.now())}
 
 
-# ---------- dashboard ----------
-basic = HTTPBasic()
+# ---------- public website: receptionist demo + dashboard (no login, by owner's choice) ----------
+app.mount("/assets", StaticFiles(directory=WEB / "assets"), name="assets")
 
 
-def _dashboard_auth(creds: HTTPBasicCredentials = Depends(basic)) -> str:
-    s = get_settings()
-    if not (_same(creds.username, s.dashboard_user) and _same(creds.password, s.dashboard_password)):
-        raise HTTPException(status_code=401, detail="unauthorized", headers={"WWW-Authenticate": "Basic"})
-    return creds.username
+def _page(name: str) -> FileResponse:
+    return FileResponse(WEB / name, media_type="text/html")
 
 
-@app.get("/dashboard", response_class=HTMLResponse, dependencies=[Depends(_dashboard_auth)])
-def dashboard() -> str:
-    return (Path(__file__).parent / "dashboard" / "index.html").read_text(encoding="utf-8")
+@app.get("/", include_in_schema=False)
+def home_page() -> FileResponse:
+    return _page("index.html")
 
 
-@app.get("/dashboard/api/metrics", dependencies=[Depends(_dashboard_auth)])
-def dashboard_metrics(start: date | None = None, end: date | None = None) -> dict:
+@app.get("/dashboard", include_in_schema=False)
+def dashboard_page() -> FileResponse:
+    return _page("dashboard.html")
+
+
+@app.get("/dashboard/calls/{call_id}", include_in_schema=False)
+def call_page(call_id: str) -> FileResponse:
+    return _page("call.html")
+
+
+def _window(start: date | None, end: date | None) -> tuple[datetime, datetime]:
     tz = clock.tz()
     end_d = end or clock.now().date()
     start_d = start or end_d - timedelta(days=30)
-    return metrics.compute(
-        get_crm(),
+    return (
         datetime.combine(start_d, time.min, tzinfo=tz),
         datetime.combine(end_d + timedelta(days=1), time.min, tzinfo=tz),
     )
 
 
-@app.get("/dashboard/calls/{call_id}", response_class=HTMLResponse)
-def dashboard_call(call_id: str, user: str = Depends(_dashboard_auth)) -> str:
-    call = get_crm().get_call(call_id) if is_uuid(call_id) else None
+@app.get("/dashboard/api/metrics")
+def dashboard_metrics(start: date | None = None, end: date | None = None, include_demo: bool = False) -> dict:
+    return metrics.compute(get_crm(), *_window(start, end), include_demo=include_demo)
+
+
+@app.get("/dashboard/api/calls")
+def dashboard_calls(start: date | None = None, end: date | None = None, include_demo: bool = False) -> dict:
+    return {"calls": metrics.recent_calls(get_crm(), *_window(start, end), include_demo=include_demo)}
+
+
+@app.get("/dashboard/api/calls/{call_id}")
+def dashboard_call(call_id: str) -> dict:
+    crm = get_crm()
+    call = crm.get_call(call_id) if is_uuid(call_id) else None
     if not call:
-        raise HTTPException(status_code=404)
-    e = html.escape
-    rows = "".join(
-        f"<tr><th>{e(k)}</th><td>{e(str(v))}</td></tr>"
-        for k, v in [
-            ("started", call.started_at),
-            ("outcome", call.outcome),
-            ("flags", ", ".join(call.flags or [])),
-            ("criteria", call.criteria),
-            ("price leak", call.price_leak),
-            ("ended reason", call.ended_reason),
-            ("summary", call.summary),
-        ]
-    )
-    return (
-        "<!doctype html><meta charset='utf-8'><meta name='viewport' "
-        "content='width=device-width,initial-scale=1'><title>Call detail</title>"
-        "<body style='font:15px system-ui;max-width:800px;margin:auto;padding:16px'>"
-        f"<h1>Call {e(call_id)}</h1><table>{rows}</table>"
-        f"<h2>Transcript</h2><pre style='white-space:pre-wrap'>{e(call.transcript or '-')}</pre>"
-        f"<h2>Audit</h2><form method='post' action='{e(call_id)}/audit'>"
-        "<label><input type='radio' name='agrees' value='true' required> Agent handled it right"
-        "</label><br><label><input type='radio' name='agrees' value='false'> Disagree</label><br>"
-        "<textarea name='notes' rows='3' cols='60' placeholder='notes'></textarea><br>"
-        "<button>Save audit</button></form></body>"
-    )
+        raise HTTPException(status_code=404, detail="call not found")
+    lines = []
+    for raw in demo.redact(call.transcript).splitlines():
+        speaker, sep, text = raw.partition(": ")
+        agent = speaker.strip().lower() in {"ai", "agent", "assistant", "bot"}
+        lines.append({"speaker": "agent" if agent else "caller", "text": text if sep else raw})
+    return {
+        "id": call.id,
+        "started_at": call.started_at.isoformat() if call.started_at else None,
+        "duration_seconds": call.duration_seconds,
+        "outcome": call.outcome,
+        "intent": call.intent,
+        "flags": call.flags or [],
+        "criteria": call.criteria or {},
+        "summary": demo.redact(call.summary),
+        "is_demo": bool(call.is_demo),
+        "price_leak": bool(call.price_leak),
+        "in_office_hours": call.in_office_hours,
+        "transcript": lines,
+        "audits": [
+            {
+                "agrees": a.agrees,
+                "notes": a.notes,
+                "auditor": a.auditor,
+                "audited_at": a.audited_at.isoformat() if a.audited_at else None,
+            }
+            for a in crm.audits_for_call(call.id)
+        ],
+    }
 
 
 class AuditIn(BaseModel):
     agrees: bool
-    notes: str | None = None
+    notes: str | None = Field(None, max_length=2000)
+    auditor: str | None = Field(None, max_length=80)
 
 
-@app.post("/dashboard/calls/{call_id}/audit", response_class=HTMLResponse)
-async def dashboard_audit(call_id: str, request: Request, user: str = Depends(_dashboard_auth)) -> str:
-    if not (is_uuid(call_id) and get_crm().get_call(call_id)):
-        raise HTTPException(status_code=404)
-    form = await request.form()
-    data = AuditIn(agrees=form.get("agrees") == "true", notes=form.get("notes") or None)
-    get_crm().add_audit(
-        Audit(call_id=call_id, auditor=user, agrees=data.agrees, notes=data.notes, audited_at=clock.now())
+@app.post("/dashboard/api/calls/{call_id}/audit")
+def dashboard_audit(call_id: str, body: AuditIn) -> dict:
+    crm = get_crm()
+    if not (is_uuid(call_id) and crm.get_call(call_id)):
+        raise HTTPException(status_code=404, detail="call not found")
+    crm.add_audit(
+        Audit(
+            call_id=call_id,
+            auditor=(body.auditor or "dashboard").strip() or "dashboard",
+            agrees=body.agrees,
+            notes=body.notes,
+            audited_at=clock.now(),
+        )
     )
-    return "<p>Audit saved. <a href='../../../dashboard'>Back to dashboard</a></p>"
+    return {"saved": True}
+
+
+class DemoChatIn(BaseModel):
+    session_id: str | None = Field(None, max_length=64)
+    message: str = Field(max_length=demo.MAX_MESSAGE_CHARS)
+    language: str = "en"
+
+
+@app.get("/demo/status")
+def demo_status() -> dict:
+    return demo.status()
+
+
+@app.post("/demo/chat")
+def demo_chat(body: DemoChatIn) -> JSONResponse:
+    session_id = body.session_id if body.session_id and is_uuid(body.session_id) else None
+    try:
+        return JSONResponse(demo.chat(session_id, body.message, body.language))
+    except demo.DemoUnavailable as e:
+        return JSONResponse(status_code=e.status, content={"error": e.message})
+    except Exception:
+        log.exception("demo chat failed")
+        return JSONResponse(
+            status_code=502, content={"error": "The receptionist couldn't answer just now. Please try again."}
+        )

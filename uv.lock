@@ -7,6 +7,7 @@ name = "aangan-voice-agent"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "anthropic" },
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "google-api-python-client" },
@@ -27,12 +28,10 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
 ]
-sim = [
-    { name = "anthropic" },
-]
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", specifier = ">=1.11.0" },
     { name = "cryptography", specifier = ">=42" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "google-api-python-client", specifier = ">=2.130" },
@@ -53,7 +52,7 @@ dev = [
     { name = "pytest", specifier = ">=8.2" },
     { name = "ruff", specifier = ">=0.5" },
 ]
-sim = [{ name = "anthropic", specifier = ">=1.11.0" }]
+sim = []
 
 [[package]]
 name = "annotated-doc"

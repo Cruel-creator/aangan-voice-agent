@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aangan Studio · Call</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+<style>
+  .back { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; font-size: 14px; margin-top: 8px; }
+  .back:hover { color: var(--ink-strong); }
+  .head { padding: 18px 0 8px; }
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; margin-top: 28px; align-items: start; }
+  .transcript { padding: 8px 24px 24px; }
+  .line { display: grid; grid-template-columns: 84px 1fr; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .line:last-child { border-bottom: 0; }
+  .who { font: 500 11px/1.9 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .line.agent .who { color: var(--green); }
+  .line p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .facts { padding: 8px 24px; }
+  .fact { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .fact:last-child { border-bottom: 0; }
+  .fact span:first-child { color: var(--muted); }
+  .fact span:last-child { text-align: right; }
+  .side { display: grid; gap: 12px; }
+  .audit { padding: 22px 24px; display: grid; gap: 12px; }
+  .audit h3 { font: 400 22px/1.2 var(--serif); }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; }
+  .choices label { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 14px; }
+  .choices input { accent-color: var(--ink-strong); }
+  .past { font-size: 14px; color: var(--muted); display: grid; gap: 6px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .line { grid-template-columns: 1fr; gap: 4px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav">
+    <a class="brand" href="/"><b>Aangan</b><span>Studio · Pune</span></a>
+    <div class="nav-links">
+      <a href="/">Receptionist</a>
+      <a href="/dashboard" aria-current="page">Dashboard</a>
+    </div>
+  </nav>
+
+  <main>
+    <a class="back" href="/dashboard">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg>
+      All calls
+    </a>
+    <div class="head">
+      <p class="eyebrow" id="kind">Call</p>
+      <h1 class="title" id="when">Loading…</h1>
+      <div class="badges" id="badges"></div>
+    </div>
+    <div id="notice" class="notice" role="status"></div>
+
+    <div class="layout" id="layout" hidden>
+      <div class="card transcript">
+        <p class="eyebrow" style="padding-top:16px">Transcript</p>
+        <div id="lines"></div>
+      </div>
+      <div class="side">
+        <div class="card facts" id="facts"></div>
+        <form class="card audit" id="audit">
+          <h3>Review this call</h3>
+          <p class="small muted" style="margin:0">Did the receptionist handle it the way the studio would want?</p>
+          <div class="choices">
+            <label><input type="radio" name="agrees" value="true" required> Handled well</label>
+            <label><input type="radio" name="agrees" value="false"> Needs work</label>
+          </div>
+          <input class="field" name="auditor" maxlength="80" placeholder="Your name (optional)">
+          <textarea class="field" name="notes" rows="3" maxlength="2000" placeholder="What should it have done differently?"></textarea>
+          <button class="btn primary" type="submit">Save review</button>
+          <div class="past" id="past"></div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <footer>Phone numbers and email addresses are hidden on this page.</footer>
+</div>
+<script src="/assets/common.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const callId = location.pathname.split("/").filter(Boolean).pop();
+  const CRITERIA = { scope: "Project fit", area: "Service area", timeline: "Timeline", budget: "Budget", decision_maker: "Decision-maker" };
+
+  function fact(label, value) { return el("div", { class: "fact" }, el("span", { text: label }), el("span", { text: value ?? "—" })); }
+
+  function renderAudits(audits) {
+    $("past").replaceChildren(...audits.map((a) => el("div", {
+      text: `${a.agrees ? "Handled well" : "Needs work"} · ${a.auditor || "dashboard"} · ${fmtWhen(a.audited_at)}${a.notes ? ` — ${a.notes}` : ""}`,
+    })));
+  }
+
+  async function load() {
+    let c;
+    try { c = await getJSON(`/dashboard/api/calls/${encodeURIComponent(callId)}`); }
+    catch (err) {
+      $("when").textContent = "Call not found";
+      $("notice").textContent = err.message.includes("404") ? "This call doesn't exist or was removed." : `Couldn't load this call (${err.message}).`;
+      $("notice").className = "notice error";
+      return;
+    }
+    document.title = `Aangan Studio · Call ${fmtWhen(c.started_at)}`;
+    $("kind").textContent = c.is_demo ? "Website demo conversation" : "Phone call";
+    $("when").textContent = c.started_at ? new Date(c.started_at).toLocaleString("en-IN", { dateStyle: "long", timeStyle: "short" }) : "Call";
+    $("badges").replaceChildren(outcomeBadge(c.outcome), ...(c.flags || []).map(flagBadge), ...(c.is_demo ? [el("span", { class: "badge", text: "Demo" })] : []));
+
+    $("lines").replaceChildren(...(c.transcript.length ? c.transcript.map((l) =>
+      el("div", { class: `line ${l.speaker}` }, el("div", { class: "who", text: l.speaker === "agent" ? "Receptionist" : (c.is_demo ? "Visitor" : "Caller") }), el("p", { text: l.text }))
+    ) : [el("p", { class: "muted", style: "padding:16px 0", text: "No transcript was recorded for this call." })]));
+
+    const crit = c.criteria || {};
+    $("facts").replaceChildren(
+      fact("Length", fmtDuration(c.duration_seconds)),
+      fact("Intent", c.intent ? c.intent.replaceAll("_", " ") : null),
+      fact("During office hours", c.in_office_hours === null ? null : c.in_office_hours ? "Yes" : "No"),
+      ...Object.entries(CRITERIA).filter(([k]) => crit[k]).map(([k, label]) => fact(label, String(crit[k]).replaceAll("_", " "))),
+      ...(c.summary ? [fact("Summary", c.summary)] : []),
+    );
+    renderAudits(c.audits || []);
+    $("layout").hidden = false;
+  }
+
+  $("audit").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = new FormData(e.target), btn = e.target.querySelector("button");
+    btn.disabled = true; btn.textContent = "Saving…";
+    try {
+      const resp = await fetch(new URL(`/dashboard/api/calls/${encodeURIComponent(callId)}/audit`, location.origin), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agrees: form.get("agrees") === "true", notes: form.get("notes") || null, auditor: form.get("auditor") || null }),
+      });
+      if (!resp.ok) throw new Error(resp.status);
+      e.target.reset(); btn.textContent = "Saved";
+      const c = await getJSON(`/dashboard/api/calls/${encodeURIComponent(callId)}`);
+      renderAudits(c.audits || []);
+    } catch { btn.textContent = "Couldn't save, try again"; }
+    finally { setTimeout(() => { btn.disabled = false; btn.textContent = "Save review"; }, 1500); }
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

@@ -17,8 +17,37 @@ def _pct(n: int, d: int) -> float | None:
     return round(100 * n / d, 1) if d else None
 
 
-def compute(crm: CRM, start: datetime, end: datetime) -> dict:
+def window_calls(crm: CRM, start: datetime, end: datetime, include_demo: bool = False):
     calls = crm.calls_between(start, end)
+    return calls if include_demo else [c for c in calls if not c.is_demo]
+
+
+def recent_calls(
+    crm: CRM, start: datetime, end: datetime, include_demo: bool = False, limit: int = 50
+) -> list[dict]:
+    """Newest first. Only fields that are safe on a public page (no phone data)."""
+    calls = sorted(
+        window_calls(crm, start, end, include_demo),
+        key=lambda c: c.started_at.timestamp() if c.started_at else 0,
+        reverse=True,
+    )
+    return [
+        {
+            "id": c.id,
+            "started_at": c.started_at.isoformat() if c.started_at else None,
+            "outcome": c.outcome,
+            "intent": c.intent,
+            "flags": c.flags or [],
+            "duration_seconds": c.duration_seconds,
+            "is_demo": bool(c.is_demo),
+            "price_leak": bool(c.price_leak),
+        }
+        for c in calls[:limit]
+    ]
+
+
+def compute(crm: CRM, start: datetime, end: datetime, include_demo: bool = False) -> dict:
+    calls = window_calls(crm, start, end, include_demo)
     call_ids = [c.id for c in calls if c.id]
     leads = crm.leads_for_calls(call_ids)
     lead_ids = [lead.id for lead in leads if lead.id]

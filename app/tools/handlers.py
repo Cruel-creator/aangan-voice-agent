@@ -51,7 +51,7 @@ STATUS_BY_OUTCOME = {
 # ---------- shared helpers ----------
 def _ensure_call(ctx: CallContext, phone: str | None = None) -> CallRecord:
     number = ctx.caller_number or phone
-    record = CallRecord(platform_call_id=ctx.call_id)
+    record = CallRecord(platform_call_id=ctx.call_id, is_demo=True if ctx.demo else None)
     if number:
         record.phone_hash = hash_phone(number)
         record.phone_encrypted = encrypt_phone(number)
@@ -191,8 +191,10 @@ def check_budget(args: m.CheckBudgetIn, ctx: CallContext) -> m.CheckBudgetOut:
 
 def get_slots(args: m.GetSlotsIn, ctx: CallContext) -> m.GetSlotsOut:
     commercial = args.project_type == "commercial"
-    designers = calendar.eligible_designers(get_crm().list_designers(), args.locality, commercial)
-    slots = calendar.find_slots(calendar.get_calendar(), designers, args.consult_type, clock.now())
+    pool = calendar.demo_designers() if ctx.demo else get_crm().list_designers()
+    designers = calendar.eligible_designers(pool, args.locality, commercial)
+    gateway = calendar.DemoCalendar() if ctx.demo else calendar.get_calendar()
+    slots = calendar.find_slots(gateway, designers, args.consult_type, clock.now())
     return m.GetSlotsOut(
         slots=[m.SlotOut(start=s.start.isoformat(), label=s.label, designer_id=s.designer_id) for s in slots]
     )
@@ -207,7 +209,10 @@ def book_consultation(args: m.BookConsultationIn, ctx: CallContext) -> m.BookCon
         if start <= clock.now():
             return m.BookConsultationOut(confirmed=False, reason="slot_in_past")
         crm = get_crm()
-        designer = crm.get_designer(args.designer_id)
+        if ctx.demo:
+            designer = next((d for d in calendar.demo_designers() if d.id == args.designer_id), None)
+        else:
+            designer = crm.get_designer(args.designer_id)
         if not designer or not designer.active:
             return m.BookConsultationOut(confirmed=False, reason="unknown_designer")
         call = _ensure_call(ctx)
@@ -216,23 +221,24 @@ def book_consultation(args: m.BookConsultationIn, ctx: CallContext) -> m.BookCon
         description = (
             f"Locality: {args.locality or '-'}\nRooms: {', '.join(args.rooms) or '-'}\nDetails: {_link(call)}"
         )
-        result = calendar.book(
-            calendar.get_calendar(), designer, start, args.consult_type, summary, description
-        )
+        gateway = calendar.DemoCalendar() if ctx.demo else calendar.get_calendar()
+        result = calendar.book(gateway, designer, start, args.consult_type, summary, description)
         if not result.confirmed:
             return m.BookConsultationOut(confirmed=False, reason=result.reason)
 
         _save_lead(
             lead,
             args,
-            designer_id=designer.id,
+            designer_id=None if ctx.demo else designer.id,  # demo designer is not a real row
             booking_id=result.booking_id,
             consult_at=start,
             consult_type=args.consult_type,
             status="booked",
         )
-        crm.touch_designer(designer.id, clock.now())
         label = calendar.Slot(start, start, designer.id).label
+        if ctx.demo:
+            return m.BookConsultationOut(confirmed=True, booking_id=result.booking_id, label=label)
+        crm.touch_designer(designer.id, clock.now())
         phone = _caller_phone(call, ctx)
         if phone:
             try:
@@ -261,6 +267,8 @@ def send_handoff(args: m.SendHandoffIn, ctx: CallContext) -> m.SendHandoffOut:
             status=lead.status if lead.status == "booked" else "qualified",
         )
         _record_decision(call, decision, facts.intent, by_agent=False)
+        if ctx.demo:
+            return m.SendHandoffOut(sent=True)  # demo: recorded, but no designer is messaged
         designer = _pick_designer(
             lead, args.locality, scope.is_commercial(args.property_type, args.project_category)
         )
@@ -289,6 +297,8 @@ def escalate_urgent(args: m.EscalateUrgentIn, ctx: CallContext) -> m.EscalateUrg
                 outcome=Outcome.ESCALATE_URGENT.value,
             )
         )
+        if ctx.demo:
+            return m.EscalateUrgentOut(escalated=True)  # demo: recorded, nobody is paged
         phone = _caller_phone(call, ctx) or (normalize_phone(args.phone) if args.phone else None)
         telegram.escalate_urgent(phone, args.name, args.summary, _link(call))
         return m.EscalateUrgentOut(escalated=True)
@@ -317,6 +327,8 @@ def route_human_review(args: m.RouteHumanReviewIn, ctx: CallContext) -> m.Logged
                 criteria=decision.criteria,
             )
         )
+        if ctx.demo:
+            return m.LoggedOut(logged=True)  # demo: recorded, the studio head is not messaged
         telegram.send_handoff(
             get_crm(),
             _studio_head(),

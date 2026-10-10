@@ -1,8 +1,15 @@
 # Aangan Studio — voice enquiry agent backend
 
-The backend for an AI phone agent: qualification engine, tool endpoints, booking,
-Telegram handoffs, dashboard. It does not depend on any one voice platform. The
-platform calls it over HTTPS as described in [docs/PLATFORM_API.md](docs/PLATFORM_API.md).
+The backend for an AI phone agent, plus a public website:
+
+- **`/`**: a live AI receptionist. Visitors talk (microphone, English or Hindi) or type to
+  the same agent the phone line uses. It runs in demo mode: no real bookings or messages.
+  Needs `ANTHROPIC_API_KEY`; usage is capped by `DEMO_DAILY_TURN_LIMIT` and `DEMO_SESSION_TURN_LIMIT`.
+- **`/dashboard`**: calls, funnel, declines, quality and cost, with each call's transcript.
+  Public, no login (owner's choice); phone numbers and emails in transcripts are masked.
+
+The phone side doesn't depend on any one voice platform. The platform calls the backend
+over HTTPS as described in [docs/PLATFORM_API.md](docs/PLATFORM_API.md).
 Database: Neon Postgres. Languages: English and Hindi.
 
 `CLAUDE.md` has the non-negotiable rules.

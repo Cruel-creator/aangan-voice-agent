@@ -61,11 +61,12 @@ def test_missing_secret_config_fails_closed(world, monkeypatch):
     assert world.client.post("/tools/check_scope", json=envelope({}), headers=AUTH).status_code == 503
 
 
-def test_telegram_and_cron_and_dashboard_require_auth(world):
+def test_telegram_and_cron_require_auth_but_website_is_public(world):
     assert world.client.post("/webhooks/telegram", json={}).status_code == 401
     assert world.client.post("/cron/reroute-handoffs").status_code == 401
-    assert world.client.get("/dashboard").status_code == 401
-    assert world.client.get("/dashboard", auth=("nikhil", "wrong")).status_code == 401
+    # The website and dashboard are public by the owner's choice.
+    for page in ("/", "/dashboard", "/dashboard/api/metrics", "/dashboard/api/calls", "/demo/status"):
+        assert world.client.get(page).status_code == 200, page
 
 
 def test_unknown_tool_404_and_bad_envelope_422(world):

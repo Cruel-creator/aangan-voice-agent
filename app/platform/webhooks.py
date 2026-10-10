@@ -37,12 +37,19 @@ def verify_secret(request: Request) -> None:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
-class CallContext(BaseModel):
+class _CallIds(BaseModel):
     call_id: str = Field(min_length=1, description="The platform's id for this phone call")
     caller_number: str | None = Field(None, description="Caller's number, E.164 if possible")
 
 
-class ToolRequest(CallContext):
+class CallContext(_CallIds):
+    """Internal context passed to tool handlers. `demo` is set only by the website demo
+    (never from a request body): demo calls skip calendars, Telegram and SMS."""
+
+    demo: bool = False
+
+
+class ToolRequest(_CallIds):
     model_config = ConfigDict(extra="forbid")
 
     arguments: dict[str, Any] = Field(default_factory=dict)
@@ -53,7 +60,7 @@ class TranscriptMessage(BaseModel):
     text: str
 
 
-class EndOfCallReport(CallContext):
+class EndOfCallReport(_CallIds):
     model_config = ConfigDict(extra="ignore")
 
     started_at: datetime | None = None

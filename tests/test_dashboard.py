@@ -86,38 +86,70 @@ def test_empty_window_reports_no_data_not_zero(world):
     assert m["cost"]["per_call_inr"] is None and m["cost"]["pipeline_value_inr"] is None
 
 
-def test_dashboard_page_and_api(world):
+def test_dashboard_page_and_api_are_public(world):
     seed(world.crm)
-    page = world.client.get("/dashboard", auth=("nikhil", "pw"))
-    assert page.status_code == 200 and "chart.umd.min.js" in page.text
-    api = world.client.get("/dashboard/api/metrics?start=2026-09-01&end=2026-09-30", auth=("nikhil", "pw"))
+    page = world.client.get("/dashboard")
+    assert page.status_code == 200 and "chart.umd.min.js" in page.text and "/assets/dashboard.js" in page.text
+    api = world.client.get("/dashboard/api/metrics?start=2026-09-01&end=2026-09-30")
     assert api.json()["funnel"]["calls"] == 6
 
 
-def test_home_page_is_a_status_page_not_a_404(world):
+def test_demo_calls_are_excluded_unless_asked_for(world):
+    seed(world.crm)
+    world.crm.upsert_call(CallRecord(platform_call_id="web-demo-1", is_demo=True, started_at=T, intent="new"))
+    q = "start=2026-09-01&end=2026-09-30"
+    assert world.client.get(f"/dashboard/api/metrics?{q}").json()["funnel"]["calls"] == 6
+    assert world.client.get(f"/dashboard/api/metrics?{q}&include_demo=true").json()["funnel"]["calls"] == 7
+    rows = world.client.get(f"/dashboard/api/calls?{q}&include_demo=true").json()["calls"]
+    assert len(rows) == 7 and sum(r["is_demo"] for r in rows) == 1
+    assert all("phone" not in key for row in rows for key in row)  # nothing phone-related in the list
+
+
+def test_home_page_is_the_receptionist(world):
     page = world.client.get("/")
-    assert page.status_code == 200 and "Running" in page.text and "/dashboard" in page.text
-    for secret in ("test-tool-secret", "cron-secret", "pw"):  # nothing sensitive on a public page
+    assert page.status_code == 200 and "/assets/demo.js" in page.text and "/dashboard" in page.text
+    for secret in ("test-tool-secret", "cron-secret"):  # nothing sensitive on a public page
         assert secret not in page.text
+    assert world.client.get("/assets/app.css").status_code == 200
 
 
-def test_dashboard_fetches_its_data_by_absolute_path_and_explains_empty_state(world):
-    page = world.client.get("/dashboard", auth=("nikhil", "pw")).text
-    # Absolute path on location.origin: works with or without a trailing slash and when the
-    # page address carries basic-auth credentials (fetch rejects such URLs as a base).
-    assert 'fetch(new URL("/dashboard/api/metrics?" + q, location.origin))' in page
-    assert "No calls logged" in page and 'id="notice"' in page
+def test_dashboard_script_fetches_by_absolute_path_and_explains_empty_state(world):
+    js = world.client.get("/assets/dashboard.js").text
+    common = world.client.get("/assets/common.js").text
+    assert "new URL(path, location.origin)" in common  # works with any page URL shape
+    demo_js = world.client.get("/assets/demo.js").text
+    assert "No phone calls in this date range yet" in js
+    assert ".innerHTML" not in js + common + demo_js  # all dynamic text goes in via textContent
 
 
-def test_call_detail_and_audit_form(world):
+def test_call_detail_api_masks_phone_numbers_and_emails(world):
+    seed(world.crm)
+    call = world.crm.get_call_by_platform_id("c1")
+    world.crm.upsert_call(
+        CallRecord(
+            platform_call_id="c1",
+            transcript=(
+                "AI: Hello\nCaller: Call me on +91 98220 12345 or priya@example.com, site visit 2026-10-12"
+            ),
+        )
+    )
+    page = world.client.get(f"/dashboard/calls/{call.id}")
+    assert page.status_code == 200 and "/assets/common.js" in page.text
+    data = world.client.get(f"/dashboard/api/calls/{call.id}").json()
+    text = " ".join(line["text"] for line in data["transcript"])
+    assert "98220" not in text and "priya@example.com" not in text
+    assert "[number hidden]" in text and "[email hidden]" in text and "2026-10-12" in text
+    assert [line["speaker"] for line in data["transcript"]] == ["agent", "caller"]
+    assert world.client.get("/dashboard/api/calls/not-a-uuid").status_code == 404
+
+
+def test_audit_can_be_saved_and_is_listed(world):
     seed(world.crm)
     call_id = world.crm.get_call_by_platform_id("c1").id
-    page = world.client.get(f"/dashboard/calls/{call_id}", auth=("nikhil", "pw"))
-    assert page.status_code == 200 and "QUALIFIED" in page.text
     resp = world.client.post(
-        f"/dashboard/calls/{call_id}/audit",
-        auth=("nikhil", "pw"),
-        data={"agrees": "false", "notes": "asked budget"},
+        f"/dashboard/api/calls/{call_id}/audit",
+        json={"agrees": False, "notes": "asked budget", "auditor": "Nikhil"},
     )
     assert resp.status_code == 200
-    assert world.crm.db.tables["transcript_audits"][-1]["notes"] == "asked budget"
+    audits = world.client.get(f"/dashboard/api/calls/{call_id}").json()["audits"]
+    assert {"agrees": False, "notes": "asked budget", "auditor": "Nikhil"}.items() <= audits[-1].items()

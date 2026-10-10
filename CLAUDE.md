@@ -44,7 +44,12 @@ Caller ──► Telephony (Indian DID) ──► Voice platform (any; contract 
 6. **Every webhook is authenticated** (shared secret header, constant-time compare).
 7. **Personal data is minimal.** Caller phone goes only to the assigned designer's
    private Telegram chat, never a group. Transcripts stay in the database; Telegram
-   gets a link.
+   gets a link. The website and dashboard are public with no login (owner's decision,
+   2026-10-10), so public pages never show phone data and mask phone numbers and email
+   addresses inside transcripts (`app/demo.py:redact`).
+9. **The website demo never acts for real.** `/demo/chat` runs the same prompt, tools
+   and rules, but in demo mode: no calendar, Telegram or SMS, calls flagged `is_demo`
+   and excluded from metrics unless asked for. Usage is capped per day and per session.
 8. All times are `Asia/Kolkata`. Office hours 10:00–19:00.
 
 ## Stack (defaults — change only with a reason)
@@ -74,7 +79,9 @@ app/
   services/
     calendar.py  telegram.py  sms.py  crm.py  cost.py
   platform/webhooks.py    neutral tool-call + end-of-call contract, shared-secret auth
-  dashboard/              HTML + Chart.js page served at /dashboard
+  demo.py                 website receptionist demo (Claude + the same tools, demo mode)
+  dashboard/metrics.py    dashboard numbers
+  web/                    public pages: / (receptionist), /dashboard, /dashboard/calls/{id}
 config/rules.yaml
 prompts/voice_agent_system_prompt.md
 db/migrations/  db/seed.sql

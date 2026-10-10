@@ -58,7 +58,7 @@ from app.services.crm import (  # noqa: E402
     set_crm,
 )
 from app.services.price_audit import find_price_mentions  # noqa: E402
-from scripts.export_tools import greeting, tool_definitions  # noqa: E402
+from app.tools.schemas import greeting, tool_definitions  # noqa: E402
 from tests.conftest import IST, FakeCalendar, FakeTelegram  # noqa: E402
 
 STUDIO_MODEL = os.environ.get("SIM_STUDIO_MODEL", "claude-opus-5-5")

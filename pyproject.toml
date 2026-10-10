@@ -17,6 +17,7 @@ dependencies = [
     "tzdata>=2026.5",
     "psycopg[binary]>=3.2",
     "psycopg-pool>=3.2",
+    "anthropic>=1.11.0",
 ]
 
 [dependency-groups]
@@ -24,9 +25,7 @@ dev = [
     "pytest>=8.2",
     "ruff>=0.5",
 ]
-sim = [
-    "anthropic>=1.11.0",
-]
+sim = []
 
 [tool.vercel]
 entrypoint = "app.main:app"  # Vercel loads the FastAPI app from app/main.py

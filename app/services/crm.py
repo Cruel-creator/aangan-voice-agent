@@ -84,6 +84,17 @@ class CallRecord(BaseModel):
     summary: str | None = None
     price_leak: bool | None = None
     logged_by_agent: bool | None = None
+    is_demo: bool | None = None
+
+
+class DemoSession(BaseModel):
+    id: str | None = None
+    call_id: str | None = None
+    messages: list[dict[str, Any]] = []
+    turns: int = 0
+    language: str = "en"
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class Lead(BaseModel):
@@ -199,8 +210,17 @@ class MemoryBackend:
         return rows
 
 
-TABLES = {"designers", "calls", "leads", "handoffs", "consult_outcomes", "transcript_audits"}
+TABLES = {
+    "designers",
+    "calls",
+    "leads",
+    "handoffs",
+    "consult_outcomes",
+    "transcript_audits",
+    "demo_sessions",
+}
 UUID_COLUMNS = {"id", "call_id", "lead_id", "designer_id"}
+JSONB_COLUMNS = {"criteria", "messages"}
 
 
 def is_uuid(value: Any) -> bool:
@@ -246,8 +266,8 @@ class PostgresBackend:
     def _value(col: str, value: Any) -> Any:
         from psycopg.types.json import Jsonb
 
-        if isinstance(value, dict):
-            return Jsonb(_jsonable(value))
+        if col in JSONB_COLUMNS or isinstance(value, dict):
+            return Jsonb(_jsonable(value))  # lists in jsonb columns must not become SQL arrays
         return value
 
     @staticmethod
@@ -455,6 +475,39 @@ class CRM:
         return [Audit(**r) for r in rows]
 
     # caller lookup
+    def audits_for_call(self, call_id: str) -> list[Audit]:
+        return [Audit(**r) for r in self.db.select("transcript_audits", eq={"call_id": call_id})]
+
+    # website demo sessions
+    def create_demo_session(self, call_id: str, language: str, at: datetime) -> DemoSession:
+        row = {
+            "call_id": call_id,
+            "messages": [],
+            "turns": 0,
+            "language": language,
+            "created_at": at,
+            "updated_at": at,
+        }
+        return DemoSession(**self.db.insert("demo_sessions", row))
+
+    def get_demo_session(self, session_id: str) -> DemoSession | None:
+        rows = self.db.select("demo_sessions", eq={"id": session_id})
+        return DemoSession(**rows[0]) if rows else None
+
+    def save_demo_session(self, session: DemoSession, at: datetime) -> DemoSession:
+        fields = {
+            "messages": session.messages,
+            "turns": session.turns,
+            "language": session.language,
+            "updated_at": at,
+        }
+        return DemoSession(**self.db.update("demo_sessions", {"id": session.id}, fields)[0])
+
+    def demo_turns_since(self, since: datetime) -> int:
+        return sum(
+            int(r.get("turns") or 0) for r in self.db.select("demo_sessions", gte={"updated_at": since})
+        )
+
     def lookup_caller(self, phone_hash: str, exclude_call_id: str | None = None) -> tuple[bool, Lead | None]:
         """(existing_client, most recent prior enquiry), ignoring the current call."""
         calls = [c for c in self.calls_by_phone_hash(phone_hash) if c.id != exclude_call_id]

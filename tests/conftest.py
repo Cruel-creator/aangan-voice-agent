@@ -103,8 +103,6 @@ def env(monkeypatch):
         "TELEGRAM_WEBHOOK_SECRET": "tg-secret",
         "TELEGRAM_STUDIO_HEAD_CHAT_ID": "999",
         "TELEGRAM_FRONT_DESK_CHAT_ID": "-100555",
-        "DASHBOARD_USER": "nikhil",
-        "DASHBOARD_PASSWORD": "pw",
         "CRON_SECRET": "cron-secret",
         "PUBLIC_BASE_URL": "https://agent.example.test",
         "STUDIO_ADDRESS": "Test Studio Road",

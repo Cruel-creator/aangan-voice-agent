@@ -166,9 +166,7 @@ class Settings(BaseSettings):
     studio_address: str = ""
     portfolio_url: str = ""
 
-    # Dashboard + cron
-    dashboard_user: str = ""
-    dashboard_password: str = ""
+    # Scheduled jobs (the website and dashboard are public by the owner's choice)
     cron_secret: str = ""
 
     # Cost model
@@ -176,8 +174,12 @@ class Settings(BaseSettings):
     telephony_cost_inr_per_min: float = 0.0
     fixed_monthly_cost_inr: float = 0.0
 
-    # Simulation harness only
+    # Claude: powers the website receptionist demo (and the simulation harness)
     anthropic_api_key: str = ""
+    demo_model: str = "claude-opus-5-5"
+    demo_effort: Literal["low", "medium", "high"] = "low"  # low keeps spoken replies quick
+    demo_daily_turn_limit: int = 300  # visitor messages per day across the whole site
+    demo_session_turn_limit: int = 30  # visitor messages per conversation
 
 
 @lru_cache

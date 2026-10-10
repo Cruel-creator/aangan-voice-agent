@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aangan Studio · Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+<style>
+  .head { display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; padding: 24px 0 8px; }
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .controls label.date { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 24px; }
+  .kpi { padding: 22px 24px; }
+  .kpi .num { font: 400 44px/1 var(--serif); color: var(--ink-strong); letter-spacing: -0.02em; margin-top: 14px; }
+  .kpi .sub { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .split { display: grid; grid-template-columns: 1.6fr 1fr; gap: 12px; margin-top: 12px; }
+  .chart-card { padding: 22px 24px; }
+  .chart-box { position: relative; height: 240px; margin-top: 16px; }
+  .group { margin-top: 40px; }
+  .group-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .tile { padding: 18px 20px; }
+  .tile .num { font: 500 24px/1.2 var(--sans); color: var(--ink-strong); font-variant-numeric: tabular-nums; }
+  .tile .num.na { color: var(--muted); font-weight: 400; font-size: 16px; line-height: 28.8px; }
+  .tile .num.warn { color: var(--red); }
+  .tile .label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .empty-row td { text-align: center; color: var(--muted); padding: 40px 16px; cursor: default; }
+  .flags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .source { font-size: 13px; color: var(--muted); }
+  @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, 1fr); } .split { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) { .kpi .num { font-size: 36px; } .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav">
+    <a class="brand" href="/"><b>Aangan</b><span>Studio · Pune</span></a>
+    <div class="nav-links">
+      <a href="/">Receptionist</a>
+      <a href="/dashboard" aria-current="page">Dashboard</a>
+    </div>
+  </nav>
+
+  <main>
+    <div class="head">
+      <div>
+        <p class="eyebrow">Operations</p>
+        <h1 class="title">Calls &amp; enquiries</h1>
+      </div>
+      <form class="controls" id="range">
+        <label class="date">From <input class="field" type="date" id="start"></label>
+        <label class="date">To <input class="field" type="date" id="end"></label>
+        <button class="btn primary" type="submit">Apply</button>
+        <label class="switch"><input type="checkbox" id="demo"> Include website demo</label>
+      </form>
+    </div>
+
+    <div id="notice" class="notice" role="status" style="margin-top:16px"></div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="split">
+      <div class="card chart-card">
+        <p class="eyebrow">Funnel</p>
+        <div class="chart-box"><canvas id="funnel" aria-label="Funnel from calls to won projects"></canvas></div>
+      </div>
+      <div class="card chart-card">
+        <p class="eyebrow">Why enquiries were declined</p>
+        <div class="chart-box"><canvas id="declines" aria-label="Decline reasons"></canvas></div>
+      </div>
+    </div>
+
+    <div class="group reveal">
+      <div class="group-head"><h2 class="section-title">Recent calls</h2><span class="small muted" id="calls-count"></span></div>
+      <div class="card table-wrap">
+        <table class="table">
+          <thead><tr><th>When</th><th>Outcome</th><th class="hide-sm">Notes</th><th class="hide-sm">Length</th><th>Source</th></tr></thead>
+          <tbody id="calls"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="group reveal"><div class="group-head"><h2 class="section-title">Speed</h2></div><div class="tiles" id="speed"></div></div>
+    <div class="group reveal"><div class="group-head"><h2 class="section-title">Quality</h2></div><div class="tiles" id="quality"></div></div>
+    <div class="group reveal"><div class="group-head"><h2 class="section-title">Cost and value</h2><span class="small muted">INR</span></div><div class="tiles" id="cost"></div></div>
+  </main>
+
+  <footer>Aangan Studio · operations dashboard. Website demo conversations are hidden unless you switch them on.</footer>
+</div>
+<script src="/assets/common.js"></script>
+<script src="/assets/dashboard.js"></script>
+</body>
+</html>

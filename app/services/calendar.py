@@ -113,6 +113,41 @@ def set_calendar(gw: CalendarGateway | None) -> None:
     _gateway = gw
 
 
+# ---------- website demo: no real calendars ----------
+DEMO_DESIGNER_ID = "demo-designer"
+
+
+class DemoCalendar:
+    """Always free; 'bookings' are not stored anywhere. Used only by the website demo."""
+
+    def busy(self, calendar_id, start, end):
+        return []
+
+    def insert(self, calendar_id, start, end, summary, description):
+        return f"demo-{start:%Y%m%d%H%M}"
+
+    def overlapping(self, calendar_id, start, end):
+        return []
+
+    def delete(self, calendar_id, event_id):
+        return None
+
+
+def demo_designers() -> list[Designer]:
+    """One virtual designer covering every served locality, for the website demo."""
+    rules = get_rules()
+    return [
+        Designer(
+            id=DEMO_DESIGNER_ID,
+            name="Aangan design team",
+            telegram_chat_id="",
+            calendar_id="demo",
+            areas=list(rules.service_area.allow),
+            handles_commercial=True,
+        )
+    ]
+
+
 # ---------- slot selection ----------
 @dataclass(frozen=True)
 class Slot:

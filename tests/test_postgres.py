@@ -56,7 +56,7 @@ def test_migrations_apply_once_and_seed_loads(pg):
     from scripts.migrate import apply
 
     crm, applied, url = pg
-    assert applied == ["20261007000000_init.sql", "seed.sql"]
+    assert applied == ["20261007000000_init.sql", "20261010000000_web_demo.sql", "seed.sql"]
     assert apply(url) == []  # idempotent
     designers = crm.list_designers()
     assert len(designers) == 3 and all(len(d.id) == 36 for d in designers)
@@ -161,12 +161,39 @@ def test_full_http_flow_on_postgres(pg, world):
     )
     assert r.json()["status"] == "accept" and crm.get_handoff(hid).action == "accept"
 
-    page = world.client.get(f"/dashboard/calls/{call.id}", auth=("nikhil", "pw"))
+    page = world.client.get(f"/dashboard/calls/{call.id}")
     assert page.status_code == 200
-    assert world.client.get("/dashboard/calls/not-a-uuid", auth=("nikhil", "pw")).status_code == 404
+    assert world.client.get("/dashboard/api/calls/not-a-uuid").status_code == 404
     made_up = call_tool(
         world, "book_consultation", {**LEAD, "slot": slots[1]["start"], "designer_id": "designer-1"}
     )
     assert made_up["confirmed"] is False and made_up["reason"] == "unknown_designer"
-    m = world.client.get("/dashboard/api/metrics?start=2026-09-01&end=2026-09-30", auth=("nikhil", "pw"))
+    m = world.client.get("/dashboard/api/metrics?start=2026-09-01&end=2026-09-30")
     assert m.json()["funnel"]["booked"] == 1
+
+
+def test_demo_session_messages_round_trip_as_json(pg):
+    from app.services.crm import CallRecord
+
+    crm, applied, _ = pg
+    assert "20261010000000_web_demo.sql" in applied
+    call = crm.upsert_call(CallRecord(platform_call_id="web-demo-x", is_demo=True, started_at=NOW))
+    assert call.is_demo is True
+    session = crm.create_demo_session(call.id, "hi", NOW)
+    assert session.messages == [] and session.turns == 0
+    session.messages = [
+        {"role": "user", "content": "नमस्ते"},
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": "", "signature": "sig"},
+                {"type": "tool_use", "id": "tu_1", "name": "check_scope", "input": {}},
+            ],
+        },
+    ]
+    session.turns = 1
+    crm.save_demo_session(session, NOW + timedelta(minutes=1))
+    again = crm.get_demo_session(session.id)
+    assert again.messages == session.messages and again.turns == 1 and again.language == "hi"
+    assert crm.demo_turns_since(NOW) == 1
+    assert crm.get_demo_session("not-a-uuid") is None
