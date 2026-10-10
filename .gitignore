@@ -10,3 +10,5 @@ agent_config.json
 .env.local
 .vercel
 .env.vercel
+.env*
+!.env.example
