@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, ValidationError
 from app import demo
 from app.config import get_rules, get_settings
 from app.dashboard import metrics
-from app.platform import webhooks
+from app.platform import vaani, webhooks
 from app.services import clock, jobs, telegram
 from app.services.crm import Audit, get_crm, is_uuid
 from app.tools.handlers import TOOLS
@@ -47,6 +47,43 @@ def health() -> dict:
 def tool_endpoint(name: str, body: webhooks.ToolRequest) -> JSONResponse:
     if name not in TOOLS:
         raise HTTPException(status_code=404, detail="unknown tool")
+    return _run_tool(name, body)
+
+
+# Header names never written to logs, even as names-with-values.
+_PRIVATE_HEADERS = {"authorization", webhooks.SECRET_HEADER, "cookie"}
+
+
+@app.post("/vaani/tools/{name}")
+async def vaani_tool_endpoint(name: str, request: Request) -> JSONResponse:
+    """Vaani custom tools (app/platform/vaani.py). Errors come back as 200 + {"error": ...}
+    so the agent reads them and recovers instead of the platform treating them as a crash."""
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    body = body if isinstance(body, dict) else {}
+    # Field names only (no values): shows what Vaani actually sends. Warning level because
+    # no log level is configured, so info would be dropped on Vercel.
+    log.warning(
+        "vaani tool %s: body keys %s, query keys %s, headers %s",
+        name,
+        sorted(body),
+        sorted(request.query_params),
+        sorted(h for h in request.headers if h not in _PRIVATE_HEADERS),
+    )
+    webhooks.verify_secret(request)
+    if name not in TOOLS:
+        raise HTTPException(status_code=404, detail="unknown tool")
+    req = vaani.to_tool_request(
+        TOOLS[name][0], body, dict(request.query_params), dict(request.headers), clock.now()
+    )
+    resp = _run_tool(name, req)
+    resp.status_code = 200
+    return resp
+
+
+def _run_tool(name: str, body: webhooks.ToolRequest) -> JSONResponse:
     model, handler = TOOLS[name]
     try:
         args = model.model_validate(body.arguments)

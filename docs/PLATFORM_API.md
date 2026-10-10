@@ -72,3 +72,13 @@ What the backend does with it:
 Transfers are a platform feature. `lookup_caller` returns `office_hours_now`, so the
 agent knows whether to transfer (office hours) or call `route_human_review` (after hours).
 Set `transferred: true` in the end-of-call report so the dashboard counts it.
+
+## Vaani (app.vaanivoice.ai)
+
+Vaani custom tools can't send the envelope above, so they use `POST /vaani/tools/{name}`
+(`app/platform/vaani.py`): one custom tool per agent tool, the tool's parameters as the
+body, and the header `X-Webhook-Secret: <TOOL_WEBHOOK_SECRET>`. The call id and caller
+number are read from the query string, headers or body under common names
+(`call_id`, `room_name`, `phone_number`, ...). Errors come back as `200` with an
+`error` field so the agent can recover. Each request logs its field names (never values),
+which shows what Vaani actually sends.
