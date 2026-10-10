@@ -23,7 +23,9 @@ def banned_numbers() -> set[str]:
 def assert_no_price(text: str, where: str) -> None:
     lowered = text.lower()
     for word in BANNED_WORDS:
-        assert word not in lowered, f"{where} contains {word!r}"
+        # Whole words only: the locality "Pimple Nilakh" is not a price.
+        pattern = rf"(?<!\w){re.escape(word)}(?!\w)"
+        assert not re.search(pattern, lowered), f"{where} contains {word!r}"
     numbers = set(re.findall(r"\d+", text.replace(",", "")))
     leaked = numbers & banned_numbers()
     assert not leaked, f"{where} contains price floor {leaked}"
@@ -31,6 +33,14 @@ def assert_no_price(text: str, where: str) -> None:
 
 def test_system_prompt_has_no_price():
     assert_no_price(PROMPT_PATH.read_text(encoding="utf-8"), "system prompt")
+
+
+def test_price_words_still_caught():
+    with pytest.raises(AssertionError):
+        assert_no_price("about 8 lakh", "sample")
+    with pytest.raises(AssertionError):
+        assert_no_price("₹1,800 per sq ft", "sample")
+    assert_no_price("Pimple Nilakh", "locality")
 
 
 def test_vaani_prompt_and_setup_have_no_price():
