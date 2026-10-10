@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 from app.config import get_rules, get_settings
 from app.platform.webhooks import EndOfCallReport
-from app.services import clock, cost, telegram
+from app.services import clock, cost, notify, telegram
 from app.services.crm import CRM, CallRecord, decrypt_phone, encrypt_phone, hash_phone
 from app.services.price_audit import agent_lines, find_price_mentions
 
@@ -100,8 +100,7 @@ def reroute_unacked_handoffs(crm: CRM, now: datetime) -> int:
             except Exception:
                 log.exception("decrypt failed")
         try:
-            telegram.get_telegram().send(
-                get_settings().telegram_studio_head_chat_id,
+            notify.to_studio_head(
                 telegram.handoff_text(
                     lead,
                     [f"NOT ACKNOWLEDGED IN {hours:g}H"],
@@ -111,6 +110,8 @@ def reroute_unacked_handoffs(crm: CRM, now: datetime) -> int:
                 )
                 if lead
                 else f"RE-ROUTED: handoff {handoff.id} unacknowledged (lead missing)",
+                lead,
+                prefix="RE-ROUTED: ",
             )
         except Exception:
             log.exception("re-route send failed for handoff %s", handoff.id)

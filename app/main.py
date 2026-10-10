@@ -4,10 +4,12 @@ import hmac
 import logging
 from contextlib import asynccontextmanager
 from datetime import date, datetime, time, timedelta
+from html import escape
 from pathlib import Path
+from urllib.parse import parse_qs
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
@@ -15,7 +17,7 @@ from app import demo
 from app.config import get_rules, get_settings
 from app.dashboard import metrics
 from app.platform import vaani, webhooks
-from app.services import clock, jobs, telegram
+from app.services import clock, email, jobs, notify, telegram
 from app.services.crm import Audit, get_crm, is_uuid
 from app.tools.handlers import TOOLS
 
@@ -113,6 +115,57 @@ async def telegram_webhook(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="unauthorized")
     status = telegram.handle_callback(get_crm(), await request.json(), clock.now())
     return {"ok": True, "status": status}
+
+
+# ---------- handoff acknowledge links (from handoff emails, app/services/email.py) ----------
+def _ack_page(title: str, body: str, status: int = 200) -> HTMLResponse:
+    page = (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        f"<title>{escape(title)} - Aangan Studio</title><style>"
+        "body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f6f3;"
+        "color:#2f3437;font:16px/1.6 system-ui,sans-serif;padding:16px}"
+        "main{max-width:420px;background:#fff;border:1px solid #eaeaea;border-radius:12px;padding:32px}"
+        "h1{font-size:22px;margin:0 0 8px}button{margin-top:16px;padding:12px 20px;border:0;"
+        "border-radius:6px;background:#111;color:#fff;font:600 15px system-ui;cursor:pointer}"
+        f"</style></head><body><main><h1>{escape(title)}</h1>{body}</main></body></html>"
+    )
+    return HTMLResponse(page, status_code=status)
+
+
+def _ack_target(handoff_id: str, action: str, t: str | None):
+    if not email.ack_token_ok(handoff_id, action, t):
+        return None
+    return get_crm().get_handoff(handoff_id) if is_uuid(handoff_id) else None
+
+
+@app.get("/handoffs/{handoff_id}/{action}", include_in_schema=False)
+def handoff_ack_confirm(handoff_id: str, action: str, t: str | None = None) -> HTMLResponse:
+    """Confirm page only: mail scanners open links, so a GET never records anything."""
+    if _ack_target(handoff_id, action, t) is None:
+        return _ack_page("Link not valid", "<p>This link is incomplete or has expired.</p>", 404)
+    label = email.ACK_ACTIONS[action]
+    return _ack_page(
+        f"{label}?",
+        f'<p>Record "{escape(label)}" for this enquiry.</p>'
+        f'<form method="post"><input type="hidden" name="t" value="{escape(t or "")}">'
+        f"<button>{escape(label)}</button></form>",
+    )
+
+
+@app.post("/handoffs/{handoff_id}/{action}", include_in_schema=False)
+async def handoff_ack(handoff_id: str, action: str, request: Request) -> HTMLResponse:
+    t = (parse_qs((await request.body()).decode()).get("t") or [None])[0]
+    handoff = _ack_target(handoff_id, action, t)
+    if handoff is None:
+        return _ack_page("Link not valid", "<p>This link is incomplete or has expired.</p>", 404)
+    get_crm().ack_handoff(handoff_id, "email", action, clock.now())
+    if action == "reassign":
+        try:
+            notify.reassign_requested(get_crm(), handoff)
+        except Exception:
+            log.exception("reassign notice failed for handoff %s", handoff_id)
+    return _ack_page("Recorded", f'<p>Marked as "{escape(email.ACK_ACTIONS[action])}". Thank you.</p>')
 
 
 # ---------- scheduled jobs (.github/workflows/cron.yml calls these) ----------

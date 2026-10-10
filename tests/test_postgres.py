@@ -56,7 +56,12 @@ def test_migrations_apply_once_and_seed_loads(pg):
     from scripts.migrate import apply
 
     crm, applied, url = pg
-    assert applied == ["20261007000000_init.sql", "20261010000000_web_demo.sql", "seed.sql"]
+    assert applied == [
+        "20261007000000_init.sql",
+        "20261010000000_web_demo.sql",
+        "20261011000000_designer_email.sql",
+        "seed.sql",
+    ]
     assert apply(url) == []  # idempotent
     designers = crm.list_designers()
     assert len(designers) == 3 and all(len(d.id) == 36 for d in designers)

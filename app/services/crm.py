@@ -54,7 +54,8 @@ def decrypt_phone(token: str, key: str | None = None) -> str:
 class Designer(BaseModel):
     id: str
     name: str
-    telegram_chat_id: str
+    telegram_chat_id: str | None = None  # private chat only, never a group
+    email: str | None = None  # handoffs by email (Resend); at least one of the two is set
     calendar_id: str
     areas: list[str] = []
     handles_commercial: bool = False

@@ -59,6 +59,9 @@ Caller ──► Telephony (Indian DID) ──► Voice platform (any; contract 
   `DATABASE_URL`; migrations (`scripts/migrate.py`) use the direct `DATABASE_URL_UNPOOLED`.
 - Google Calendar API (service account with access to each designer's calendar)
 - Telegram Bot API (python-telegram-bot or raw httpx) with inline keyboards
+- Resend email (`app/services/email.py`): handoffs to designers with an `email`, with
+  signed Accept / Calling now / Reassign links; `app/services/notify.py` sends on every
+  channel a person has and fails only if none delivered
 - Voice platform: not fixed. The backend speaks a neutral JSON contract
   (`app/platform/webhooks.py`, `docs/PLATFORM_API.md`). Languages: English + Hindi.
 - Deploy: Vercel (Python runtime, `vercel.json`, region `sin1`). Scheduled jobs: GitHub Actions.

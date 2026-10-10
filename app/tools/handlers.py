@@ -12,7 +12,7 @@ from app.config import get_rules, get_settings
 from app.platform.webhooks import CallContext
 from app.qualify import area, budget, scope, timeline
 from app.qualify.decision import Decision, LeadFacts, Outcome, decide
-from app.services import calendar, clock, sms, telegram
+from app.services import calendar, clock, notify, sms, telegram
 from app.services.crm import (
     CallRecord,
     Designer,
@@ -132,7 +132,8 @@ def _studio_head() -> Designer:
         id="studio_head",
         name="Studio head",
         calendar_id="",
-        telegram_chat_id=get_settings().telegram_studio_head_chat_id,
+        telegram_chat_id=get_settings().telegram_studio_head_chat_id or None,
+        email=get_settings().studio_head_email or None,
     )
 
 
@@ -272,7 +273,7 @@ def send_handoff(args: m.SendHandoffIn, ctx: CallContext) -> m.SendHandoffOut:
         designer = _pick_designer(
             lead, args.locality, scope.is_commercial(args.property_type, args.project_category)
         )
-        telegram.send_handoff(
+        notify.send_handoff(
             get_crm(),
             designer,
             lead,
@@ -329,7 +330,7 @@ def route_human_review(args: m.RouteHumanReviewIn, ctx: CallContext) -> m.Logged
         )
         if ctx.demo:
             return m.LoggedOut(logged=True)  # demo: recorded, the studio head is not messaged
-        telegram.send_handoff(
+        notify.send_handoff(
             get_crm(),
             _studio_head(),
             lead,

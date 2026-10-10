@@ -13,7 +13,7 @@ from datetime import datetime
 import httpx
 
 from app.config import get_rules, get_settings
-from app.services.crm import CRM, Designer, Handoff, Lead
+from app.services.crm import CRM, Designer, Lead
 
 log = logging.getLogger(__name__)
 API = "https://api.telegram.org"
@@ -100,18 +100,6 @@ HANDOFF_BUTTONS = [("Accept", "a"), ("Calling now", "c"), ("Reassign", "r")]
 ACTIONS = {"a": "accept", "c": "calling_now", "r": "reassign"}
 
 
-def send_handoff(
-    crm: CRM, designer: Designer, lead: Lead, flags: list[str], phone: str | None, link: str, at: datetime
-) -> Handoff:
-    handoff = crm.create_handoff(lead.id, at)
-    get_telegram().send(
-        designer.telegram_chat_id,
-        handoff_text(lead, flags, phone, link),
-        [[(label, f"h:{handoff.id}:{code}") for label, code in HANDOFF_BUTTONS]],
-    )
-    return handoff
-
-
 def escalate_urgent(phone: str | None, name: str | None, summary: str, link: str) -> None:
     minutes = get_rules().routing.urgent_escalation_callback_minutes
     text = (
@@ -158,7 +146,9 @@ def handle_callback(crm: CRM, update: dict, at: datetime) -> str:
             return "not_found"
         crm.ack_handoff(ref, who, ACTIONS[code], at)
         if code == "r":
-            notify_reassign(crm, handoff)
+            from app.services import notify  # notify imports this module
+
+            notify.reassign_requested(crm, handoff)
         tg.answer_callback(cq["id"], f"Recorded: {ACTIONS[code].replace('_', ' ')}")
         if msg.get("message_id") and code != "r":
             try:
@@ -175,12 +165,3 @@ def handle_callback(crm: CRM, update: dict, at: datetime) -> str:
 
     tg.answer_callback(cq["id"], "Unknown action")
     return "unknown"
-
-
-def notify_reassign(crm: CRM, handoff: Handoff) -> None:
-    lead = crm.get_lead(handoff.lead_id)
-    get_telegram().send(
-        get_settings().telegram_studio_head_chat_id,
-        f"Reassign requested for lead {handoff.lead_id} "
-        f"({lead.locality if lead else '-'}). Please assign another designer.",
-    )
