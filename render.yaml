@@ -7,7 +7,7 @@ services:
     plan: starter
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
-    autoDeployTrigger: checksPass
+    autoDeployTrigger: commit         # repo has no CI checks; deploy on every push to main
     preDeployCommand: /srv/.venv/bin/python -m scripts.migrate   # applies db/migrations on Neon
     envVars:
       - { key: APP_ENV, value: production }
