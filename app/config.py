@@ -174,9 +174,12 @@ class Settings(BaseSettings):
     telephony_cost_inr_per_min: float = 0.0
     fixed_monthly_cost_inr: float = 0.0
 
-    # Claude: powers the website receptionist demo (and the simulation harness)
+    # Website receptionist demo: Gemini or Claude. "auto" uses Gemini when its key is set,
+    # otherwise Claude. Claude also powers the simulation harness.
+    gemini_api_key: str = Field("", validation_alias=AliasChoices("GEMINI_API_KEY", "GOOGLE_API_KEY"))
     anthropic_api_key: str = ""
-    demo_model: str = "claude-opus-5-5"
+    demo_provider: Literal["auto", "gemini", "claude"] = "auto"
+    demo_model: str = ""  # blank: gemini-3.8-flash on Gemini, claude-opus-5-5 on Claude
     demo_effort: Literal["low", "medium", "high"] = "low"  # low keeps spoken replies quick
     demo_daily_turn_limit: int = 300  # visitor messages per day across the whole site
     demo_session_turn_limit: int = 30  # visitor messages per conversation

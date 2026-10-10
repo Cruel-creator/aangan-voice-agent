@@ -63,10 +63,13 @@ def last_tool_result(messages):
 
 @pytest.fixture
 def live(world, monkeypatch):
+    for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "DEMO_PROVIDER", "DEMO_MODEL"):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     get_settings.cache_clear()
     yield world
     demo.set_client(None)
+    demo.set_client(None, "gemini")
 
 
 def chat(w, message, session_id=None, language="en"):
@@ -189,6 +192,126 @@ def test_demo_instructions_contain_no_price():
     assert_no_price(demo.DEMO_NOTE, "demo instructions")
     for block in demo._system("hi", __import__("datetime").datetime(2026, 9, 3, 11)):
         assert_no_price(block["text"], "demo system prompt")
+
+
+# ---------- Gemini (scripted with the SDK's own types, so serialisation is real) ----------
+from google.genai import types as gt  # noqa: E402
+
+
+def g_resp(*parts, finish="STOP"):
+    content = gt.Content(role="model", parts=list(parts)) if parts else None
+    return gt.GenerateContentResponse(candidates=[gt.Candidate(content=content, finish_reason=finish)])
+
+
+def g_text(t, signature=None):
+    return g_resp(gt.Part(text=t, thought_signature=signature))
+
+
+def g_call(name, args, n=[0]):  # noqa: B006 - counter for unique ids
+    n[0] += 1
+    call = gt.FunctionCall(id=f"fc_{n[0]}", name=name, args=args)
+    return g_resp(gt.Part(function_call=call, thought_signature=f"sig-{n[0]}".encode()))
+
+
+@dataclass
+class FakeGemini:
+    script: list
+    calls: list = field(default_factory=list)
+    configs: list = field(default_factory=list)
+
+    @property
+    def models(self):
+        return self
+
+    def generate_content(self, *, model, contents, config):
+        sent = [c.model_dump(mode="json", exclude_none=True) for c in contents]
+        self.calls.append(sent)
+        self.configs.append(config)
+        step = self.script.pop(0)
+        return step(sent) if callable(step) else step
+
+
+def last_function_response(contents):
+    return contents[-1]["parts"][-1]["function_response"]
+
+
+@pytest.fixture
+def gemini(live, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    get_settings.cache_clear()
+    return live
+
+
+def test_gemini_preferred_when_both_keys_set(gemini, monkeypatch):
+    assert demo.provider() == "gemini" and gemini.client.get("/demo/status").json()["enabled"]
+    monkeypatch.setenv("DEMO_PROVIDER", "claude")
+    get_settings.cache_clear()
+    assert demo.provider() == "claude"
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    get_settings.cache_clear()
+    assert demo.provider() is None  # forced to a provider with no key: demo stays off
+
+
+def test_gemini_conversation_runs_real_tools_and_keeps_thought_signatures(gemini):
+    first_call = g_call("check_service_area", {"locality": "Wakad"})
+    fake = FakeGemini(
+        [
+            first_call,
+            g_text("Wakad is in our area. When do you need it done?", b"sig-text"),
+            g_text("Got it."),
+        ]
+    )
+    demo.set_client(fake, "gemini")
+    first = chat(gemini, "I have a 2BHK in Wakad").json()
+    assert first["reply"] == "Wakad is in our area. When do you need it done?"
+
+    fn_call = first_call.candidates[0].content.parts[0].function_call
+    response = last_function_response(fake.calls[1])
+    assert response == {"id": fn_call.id, "name": "check_service_area", "response": {"result": "in"}}
+    # The model's turn went back byte-for-byte, signature included.
+    sent_back = gt.Content.model_validate(fake.calls[1][-2])
+    assert sent_back.parts[0].thought_signature == first_call.candidates[0].content.parts[0].thought_signature
+
+    second = chat(gemini, "By March", session_id=first["session_id"]).json()
+    assert second["session_id"] == first["session_id"]
+    assert fake.calls[2][: len(fake.calls[1])] == fake.calls[1]  # append-only history
+    assert gt.Content.model_validate(fake.calls[2][-2]).parts[0].thought_signature == b"sig-text"
+    assert fake.calls[2][-1] == {"role": "user", "parts": [{"text": "By March"}]}
+
+    config = fake.configs[0]
+    assert config.automatic_function_calling.disable is True
+    assert len(config.tools[0].function_declarations) == len(demo.TOOLS)
+    assert demo.DEMO_NOTE.strip() in config.system_instruction
+    assert_no_price(config.system_instruction, "gemini system instruction")
+    assert gemini.crm.get_call(first["call_id"]).transcript.splitlines()[-1] == "AI: Got it."
+
+
+def test_gemini_tool_errors_go_back_to_the_model(gemini):
+    fake = FakeGemini([g_call("get_slots", {"consult_type": "zoom"}), g_text("Let me try that differently.")])
+    demo.set_client(fake, "gemini")
+    assert chat(gemini, "slots please").json()["reply"] == "Let me try that differently."
+    assert last_function_response(fake.calls[1])["response"]["fields"] == ["consult_type"]
+
+
+def test_gemini_block_is_a_refusal_and_is_not_kept_in_history(gemini):
+    fake = FakeGemini([g_resp(finish="SAFETY"), g_text("Hello again.")])
+    demo.set_client(fake, "gemini")
+    first = chat(gemini, "something off-topic").json()
+    assert first["reply"] == demo.REFUSAL_REPLY
+    assert chat(gemini, "hi", session_id=first["session_id"]).json()["reply"] == "Hello again."
+    assert fake.calls[1] == [{"role": "user", "parts": [{"text": "hi"}]}]
+    # The visitor-facing transcript still records both exchanges.
+    assert len(gemini.crm.get_call(first["call_id"]).transcript.splitlines()) == 4
+
+
+def test_switching_provider_starts_a_fresh_conversation(live, monkeypatch):
+    demo.set_client(FakeClient([text("Hi from Claude.")]))
+    first = chat(live, "hello").json()
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    get_settings.cache_clear()
+    demo.set_client(FakeGemini([g_text("Hi from Gemini.")]), "gemini")
+    second = chat(live, "hello again", session_id=first["session_id"]).json()
+    assert second["reply"] == "Hi from Gemini." and second["session_id"] != first["session_id"]
 
 
 def test_redact_keeps_dates_and_areas():

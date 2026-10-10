@@ -79,7 +79,7 @@ app/
   services/
     calendar.py  telegram.py  sms.py  crm.py  cost.py
   platform/webhooks.py    neutral tool-call + end-of-call contract, shared-secret auth
-  demo.py                 website receptionist demo (Claude + the same tools, demo mode)
+  demo.py                 website receptionist demo (Gemini or Claude + the same tools, demo mode)
   dashboard/metrics.py    dashboard numbers
   web/                    public pages: / (receptionist), /dashboard, /dashboard/calls/{id}
 config/rules.yaml

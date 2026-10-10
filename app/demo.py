@@ -5,8 +5,11 @@ calls run in demo mode (CallContext.demo=True): decisions are made and recorded 
 but no real calendar, Telegram or SMS is touched, and the call is flagged is_demo so it
 stays out of the real numbers unless the dashboard is asked to include it.
 
-The conversation (including the model's thinking blocks) is stored per session in
-Postgres and only ever appended to, as the Claude API requires for multi-turn tool use.
+The model is Gemini or Claude (Settings.demo_provider; "auto" prefers Gemini when its key is
+set). The conversation, including the model's thinking blocks or thought signatures, is
+stored per session in Postgres in that provider's own message format and only ever appended
+to, as both APIs require for multi-turn tool use. A session started on one provider is not
+continued on the other; the visitor just gets a fresh conversation.
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ from app.services.crm import CallRecord, get_crm
 from app.services.jobs import PRICING_ASK
 from app.services.price_audit import find_price_mentions
 from app.tools.handlers import TOOLS
-from app.tools.schemas import anthropic_tools, greeting
+from app.tools.schemas import anthropic_tools, gemini_tools, greeting
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +38,10 @@ MAX_MESSAGE_CHARS = 1000
 MAX_MODEL_ROUNDS = 8  # model calls per visitor message (each tool round is one call)
 LANGUAGES = {"en": "English", "hi": "Hindi"}
 REFUSAL_REPLY = "Sorry, I can't help with that here. Is there an interior project I can help you with?"
+TROUBLE_REPLY = "Sorry, I'm having trouble right now. Could you say that again?"
+DEFAULT_MODELS = {"gemini": "gemini-3.8-flash", "claude": "claude-opus-5-5"}
+# Gemini stops for these when it won't answer; treat like a Claude refusal.
+GEMINI_BLOCKED = {"SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "RECITATION"}
 
 DEMO_NOTE = f"""
 
@@ -60,36 +67,64 @@ class DemoUnavailable(Exception):
         self.message, self.status = message, status
 
 
-_client: Any = None
+_clients: dict[str, Any] = {}
 
 
-def get_client() -> Any:
-    global _client
-    if _client is None:
-        import anthropic
-
-        _client = anthropic.Anthropic(api_key=get_settings().anthropic_api_key, max_retries=2)
-    return _client
-
-
-def set_client(client: Any) -> None:
-    """Tests inject a fake Claude client here."""
-    global _client
-    _client = client
+def provider() -> str | None:
+    """Which model provider answers visitors: "gemini", "claude", or None (demo off)."""
+    s = get_settings()
+    keys = {"gemini": s.gemini_api_key, "claude": s.anthropic_api_key}
+    if s.demo_provider != "auto":
+        return s.demo_provider if keys[s.demo_provider] else None
+    return next((p for p in ("gemini", "claude") if keys[p]), None)
 
 
-def _system(language: str, now: datetime) -> list[dict]:
+def get_client(name: str = "claude") -> Any:
+    if name not in _clients:
+        s = get_settings()
+        if name == "gemini":
+            from google import genai
+
+            _clients[name] = genai.Client(api_key=s.gemini_api_key)
+        else:
+            import anthropic
+
+            _clients[name] = anthropic.Anthropic(api_key=s.anthropic_api_key, max_retries=2)
+    return _clients[name]
+
+
+def set_client(client: Any, name: str = "claude") -> None:
+    """Tests inject a fake client here (None clears it)."""
+    if client is None:
+        _clients.pop(name, None)
+    else:
+        _clients[name] = client
+
+
+def _system_parts(language: str, now: datetime) -> tuple[str, str]:
     base = PROMPT_PATH.read_text(encoding="utf-8") + DEMO_NOTE
     dynamic = (
         f"Today is {now:%A %d %B %Y}, {now:%I:%M %p} India time. The visitor chose "
         f"{LANGUAGES.get(language, 'English')}; reply in that language (Hindi in Devanagari "
         "script), and follow them if they switch between English and Hindi."
     )
+    return base, dynamic
+
+
+def _system(language: str, now: datetime) -> list[dict]:
+    base, dynamic = _system_parts(language, now)
     # Stable prompt first with a cache breakpoint; the per-request line goes after it.
     return [
         {"type": "text", "text": base, "cache_control": {"type": "ephemeral"}},
         {"type": "text", "text": dynamic},
     ]
+
+
+def _format_of(messages: list[dict]) -> str | None:
+    """Which provider wrote a stored conversation (Gemini messages carry "parts")."""
+    if not messages:
+        return None
+    return "gemini" if any("parts" in m for m in messages) else "claude"
 
 
 def _run_tool(name: str, raw_input: dict, ctx: CallContext) -> tuple[str, bool]:
@@ -124,7 +159,7 @@ def _start_of_today(now: datetime) -> datetime:
 def status() -> dict:
     s = get_settings()
     return {
-        "enabled": bool(s.anthropic_api_key),
+        "enabled": provider() is not None,
         "greeting": greeting(),
         "languages": LANGUAGES,
         "session_turn_limit": s.demo_session_turn_limit,
@@ -133,8 +168,9 @@ def status() -> dict:
 
 def chat(session_id: str | None, text: str, language: str) -> dict:
     s = get_settings()
-    if not s.anthropic_api_key:
-        raise DemoUnavailable("The live demo isn't switched on yet (no Claude API key configured).", 503)
+    which = provider()
+    if which is None:
+        raise DemoUnavailable("The live demo isn't switched on yet (no AI model key configured).", 503)
     text = (text or "").strip()
     if not text:
         raise DemoUnavailable("Say or type something first.", 422)
@@ -147,6 +183,8 @@ def chat(session_id: str | None, text: str, language: str) -> dict:
         raise DemoUnavailable("The demo has reached today's usage limit. Please try again tomorrow.", 429)
 
     session = crm.get_demo_session(session_id) if session_id else None
+    if session is not None and _format_of(session.messages) not in (None, which):
+        session = None  # provider switched since this conversation began: start fresh
     if session is None:
         call = crm.upsert_call(
             CallRecord(
@@ -163,41 +201,8 @@ def chat(session_id: str | None, text: str, language: str) -> dict:
     call = crm.get_call(session.call_id)
     ctx = CallContext(call_id=call.platform_call_id, demo=True)
 
-    messages = list(session.messages) + [{"role": "user", "content": text}]
-    reply = ""
-    for _ in range(MAX_MODEL_ROUNDS):
-        resp = get_client().beta.messages.create(
-            model=s.demo_model,
-            max_tokens=4096,
-            system=_system(language, now),
-            tools=anthropic_tools(),
-            messages=messages,
-            output_config={"effort": s.demo_effort},
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-        )
-        messages.append({"role": "assistant", "content": _block_dicts(resp.content)})
-        if resp.stop_reason == "refusal":
-            reply = REFUSAL_REPLY
-            break
-        uses = [b for b in resp.content if getattr(b, "type", "") == "tool_use"]
-        if resp.stop_reason != "tool_use" or not uses:
-            reply = _text(resp.content)
-            break
-        results = []
-        for u in uses:
-            content, is_error = _run_tool(u.name, u.input, ctx)
-            results.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": u.id,
-                    "content": content,
-                    **({"is_error": True} if is_error else {}),
-                }
-            )
-        messages.append({"role": "user", "content": results})
-    else:
-        reply = "Sorry, I'm having trouble right now. Could you say that again?"
+    turn = _gemini_turn if which == "gemini" else _claude_turn
+    messages, reply = turn(list(session.messages), text, language, now, ctx)
     reply = reply or "Sorry, could you say that again?"
 
     session.messages, session.turns, session.language = messages, session.turns + 1, language
@@ -212,6 +217,92 @@ def chat(session_id: str | None, text: str, language: str) -> dict:
         "turns_left": max(s.demo_session_turn_limit - session.turns, 0),
         "call_id": call.id,
     }
+
+
+def _model_name(which: str) -> str:
+    return get_settings().demo_model or DEFAULT_MODELS[which]
+
+
+def _claude_turn(
+    history: list[dict], text: str, language: str, now: datetime, ctx: CallContext
+) -> tuple[list[dict], str]:
+    s = get_settings()
+    messages = history + [{"role": "user", "content": text}]
+    for _ in range(MAX_MODEL_ROUNDS):
+        resp = get_client("claude").beta.messages.create(
+            model=_model_name("claude"),
+            max_tokens=4096,
+            system=_system(language, now),
+            tools=anthropic_tools(),
+            messages=messages,
+            output_config={"effort": s.demo_effort},
+            betas=["server-side-fallback-2026-07-01"],
+            fallbacks="default",
+        )
+        if resp.stop_reason == "refusal":
+            return history, REFUSAL_REPLY  # the refused exchange stays out of the model's history
+        messages.append({"role": "assistant", "content": _block_dicts(resp.content)})
+        uses = [b for b in resp.content if getattr(b, "type", "") == "tool_use"]
+        if resp.stop_reason != "tool_use" or not uses:
+            return messages, _text(resp.content)
+        results = []
+        for u in uses:
+            content, is_error = _run_tool(u.name, u.input, ctx)
+            results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": u.id,
+                    "content": content,
+                    **({"is_error": True} if is_error else {}),
+                }
+            )
+        messages.append({"role": "user", "content": results})
+    return messages, TROUBLE_REPLY
+
+
+def _gemini_turn(
+    history: list[dict], text: str, language: str, now: datetime, ctx: CallContext
+) -> tuple[list[dict], str]:
+    from google.genai import types
+
+    s = get_settings()
+    config = types.GenerateContentConfig(
+        system_instruction="\n\n".join(_system_parts(language, now)),
+        tools=gemini_tools(),
+        # We run the tools ourselves, in demo mode, and keep the history.
+        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        thinking_config=types.ThinkingConfig(thinking_level=s.demo_effort.upper()),
+        max_output_tokens=4096,
+    )
+    messages = history + [{"role": "user", "parts": [{"text": text}]}]
+    for _ in range(MAX_MODEL_ROUNDS):
+        resp = get_client("gemini").models.generate_content(
+            model=_model_name("gemini"),
+            contents=[types.Content.model_validate(m) for m in messages],
+            config=config,
+        )
+        cand = (resp.candidates or [None])[0]
+        reason = getattr(cand, "finish_reason", None)
+        finish = getattr(reason, "value", reason) or ""
+        if cand is None or str(finish) in GEMINI_BLOCKED:
+            return history, REFUSAL_REPLY  # the refused exchange stays out of the model's history
+        if cand.content is None or not cand.content.parts:
+            log.warning("gemini returned no content (finish_reason=%s)", finish)
+            return history, TROUBLE_REPLY
+        # Store the model's turn exactly as returned: thought signatures must come back unchanged.
+        messages.append({**cand.content.model_dump(mode="json", exclude_none=True), "role": "model"})
+        calls = [p.function_call for p in cand.content.parts if p.function_call]
+        if not calls:
+            return messages, " ".join(p.text for p in cand.content.parts if p.text and not p.thought).strip()
+        parts = []
+        for fc in calls:
+            content, _ = _run_tool(fc.name or "", fc.args or {}, ctx)
+            part = types.Part(
+                function_response=types.FunctionResponse(id=fc.id, name=fc.name, response=json.loads(content))
+            )
+            parts.append(part.model_dump(mode="json", exclude_none=True))
+        messages.append({"role": "user", "parts": parts})
+    return messages, TROUBLE_REPLY
 
 
 def _update_call(call: CallRecord, visitor: str, reply: str, now: datetime) -> None:

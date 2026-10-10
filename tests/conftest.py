@@ -88,6 +88,9 @@ def no_real_database(monkeypatch):
     monkeypatch.setitem(Settings.model_config, "env_file", None)  # tests never read .env/.env.local
     for key in ("DATABASE_URL", "DATABASE_URL_UNPOOLED", "DATABASE_URL_DIRECT"):
         monkeypatch.setenv(key, "postgresql://tests-must-not-use-a-real-db.invalid/x")
+    # Nor a real model API: keys set in the shell (e.g. a Windows user variable) are hidden.
+    for key in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

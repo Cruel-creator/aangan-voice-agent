@@ -95,3 +95,19 @@ def anthropic_tools() -> list[dict]:
         {"name": t["name"], "description": t["description"], "input_schema": t["parameters"]}
         for t in tool_definitions("")
     ]
+
+
+def gemini_tools() -> list:
+    """The same tools as Gemini function declarations."""
+    from google.genai import types
+
+    return [
+        types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name=t["name"], description=t["description"], parameters_json_schema=t["parameters"]
+                )
+                for t in tool_definitions("")
+            ]
+        )
+    ]
