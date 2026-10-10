@@ -85,7 +85,8 @@ app/
   platform/vaani_sync.py  pulls finished Vaani calls into the dashboard; outcome re-decided in code
   demo.py                 website receptionist demo (Gemini or Claude + the same tools, demo mode)
   dashboard/metrics.py    dashboard numbers
-  web/                    public pages: / (receptionist), /dashboard, /dashboard/calls/{id}
+  web/                    public pages: / (receptionist), /map (components map), /dashboard,
+                          /dashboard/calls/{id}
 config/rules.yaml
 prompts/voice_agent_system_prompt.md
 db/migrations/  db/seed.sql

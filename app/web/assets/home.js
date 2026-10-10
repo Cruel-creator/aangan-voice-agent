@@ -16,27 +16,49 @@
     dark: { highlightColor: 0x6e4f34, midtoneColor: 0x3d2c1f, lowlightColor: 0x231a13, baseColor: 0x161615 },
   };
   let fog = null;
+  let paused = false;
   function webglOk() {
     try { const c = document.createElement("canvas"); return !!(c.getContext("webgl") || c.getContext("experimental-webgl")); }
     catch { return false; }
   }
+  // The fog is heavily blurred, so it's drawn at half (desktop) or a third (phones) of CSS
+  // resolution and stretched: it looks the same and costs a quarter of the GPU time or less.
+  // Vanta renders at devicePixelRatio / scale.
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
   function startFog() {
     if (fog || reduce || !window.VANTA?.FOG || !webglOk()) return;
     try {
       fog = VANTA.FOG({
         el: heroBg, mouseControls: true, touchControls: true, gyroControls: false,
-        minHeight: 200, minWidth: 200, blurFactor: 0.62, speed: 0.85, zoom: 0.75, scale: 1, scaleMobile: 4,
+        minHeight: 200, minWidth: 200, blurFactor: 0.62, speed: 0.85, zoom: 0.75, scale: dpr * 2, scaleMobile: dpr * 3,
         ...(dark.matches ? PALETTES.dark : PALETTES.light),
       });
       requestAnimationFrame(() => heroBg.classList.add("ready"));
     } catch { fog = null; }
   }
-  function stopFog() { fog?.destroy(); fog = null; heroBg.classList.remove("ready"); }
+  // Pause the render loop off screen instead of destroying the effect: rebuilding the WebGL
+  // context on every scroll back to the top caused a visible hitch.
+  function pauseFog() {
+    if (!fog || paused) return;
+    if (typeof fog.req === "number" && typeof fog.animationLoop === "function") { cancelAnimationFrame(fog.req); paused = true; }
+    else { fog.destroy(); fog = null; heroBg.classList.remove("ready"); }
+  }
+  let heroVisible = true, idle = false;
+  function resumeFog() {
+    if (!idle) return; // first start waits for the idle moment below
+    if (!fog) return startFog();
+    if (paused) { paused = false; fog.req = requestAnimationFrame(fog.animationLoop); }
+  }
   dark.addEventListener?.("change", () => fog?.setOptions(dark.matches ? PALETTES.dark : PALETTES.light));
-  // Only render while the hero is on screen (saves GPU and battery further down the page).
   if ("IntersectionObserver" in window) {
-    new IntersectionObserver(([e]) => (e.isIntersecting ? startFog() : stopFog()), { threshold: 0.02 }).observe($(".hero-section"));
-  } else startFog();
+    new IntersectionObserver(([e]) => {
+      heroVisible = e.isIntersecting;
+      heroVisible ? resumeFog() : pauseFog();
+    }, { threshold: 0.02 }).observe($(".hero-section"));
+  }
+  // The fog starts in a quiet moment so it never competes with the first paint and the intro.
+  const whenIdle = window.requestIdleCallback || ((fn) => setTimeout(fn, 400));
+  whenIdle(() => { idle = true; if (heroVisible) startFog(); }, { timeout: 1200 });
 
   // ---------- 2. "Start talking" ----------
   $("#start-talking")?.addEventListener("click", () => {

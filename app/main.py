@@ -199,7 +199,11 @@ async def revalidate_site_files(request: Request, call_next):
     revalidate it (a cheap 304 when unchanged) instead of running a stale script."""
     response = await call_next(request)
     path = request.url.path
-    if path.startswith("/assets/") or path in ("/", "/dashboard") or path.startswith("/dashboard/calls/"):
+    if (
+        path.startswith("/assets/")
+        or path in ("/", "/dashboard", "/map")
+        or path.startswith("/dashboard/calls/")
+    ):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -216,6 +220,32 @@ def home_page() -> FileResponse:
 @app.get("/dashboard", include_in_schema=False)
 def dashboard_page() -> FileResponse:
     return _page("dashboard.html")
+
+
+@app.get("/map", include_in_schema=False)
+def map_page() -> FileResponse:
+    return _page("map.html")
+
+
+@app.get("/dashboard/api/status")
+def dashboard_status() -> dict:
+    """Which parts are switched on, for the public components map. Booleans and a count only:
+    never a key, address or number."""
+    s = get_settings()
+    try:
+        designers = len(get_crm().list_designers())
+    except Exception:
+        log.exception("designer count failed")
+        designers = 0
+    return {
+        "website": {"on": demo.provider() is not None, "provider": demo.provider()},
+        "vaani_sync": bool(s.vaani_api_key),
+        "database": bool(s.database_url),
+        "email": {"key": bool(s.resend_api_key), "studio_head": bool(s.studio_head_email)},
+        "telegram": bool(s.telegram_bot_token),
+        "calendar": bool(s.google_service_account_json),
+        "designers": designers,
+    }
 
 
 @app.get("/dashboard/calls/{call_id}", include_in_schema=False)

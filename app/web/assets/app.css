@@ -49,10 +49,9 @@ body {
 body::before { /* soft warm light behind the page, fixed so it never scrolls */
   content: ""; position: fixed; inset: -20vmax; pointer-events: none; z-index: -1;
   background: radial-gradient(40vmax 30vmax at 75% 10%, var(--glow), transparent 70%);
-  animation: drift 28s ease-in-out infinite alternate;
+  /* Static on purpose: an endlessly animated full-viewport layer cost frames on every page. */
 }
-@keyframes drift { to { transform: translate3d(-6vmax, 4vmax, 0); } }
-@media (prefers-reduced-motion: reduce) { body::before { animation: none; } * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
 a { color: inherit; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
 a:hover { text-decoration-color: currentColor; }
@@ -163,8 +162,10 @@ textarea.field { height: auto; padding: 10px 12px; resize: vertical; }
 .split-ready { visibility: visible !important; }
 
 @media (max-width: 640px) {
-  .nav { padding: 16px 0; }
+  .nav { padding: 16px 0; gap: 8px; }
   .brand span { display: none; }
+  .nav-links { gap: 0; }
+  .nav-links a { padding: 6px 7px; font-size: 13.5px; white-space: nowrap; }
   section { padding: 36px 0; }
   .pad { padding: 18px; }
 }
