@@ -32,11 +32,21 @@ NESTED_KEYS = ("call", "metadata", "context", "session", "call_details")
 EMPTY = (None, "", "null", "None", "undefined")
 
 
+def unfilled(value: Any) -> bool:
+    """Blank, or a {{variable}} Vaani left unsubstituted."""
+    return value in EMPTY or (isinstance(value, str) and "{{" in value)
+
+
+def variable_report(query: dict[str, str]) -> dict[str, str]:
+    """For logs: whether each query parameter was filled in, without its value."""
+    return {k: ("literal" if "{{" in v else "empty" if v in EMPTY else "filled") for k, v in query.items()}
+
+
 def _find(keys: tuple[str, ...], *sources: dict[str, Any]) -> str | None:
     for source in sources:
         for key in keys:
             value = source.get(key)
-            if value not in EMPTY and not isinstance(value, dict | list):
+            if not unfilled(value) and not isinstance(value, dict | list):
                 return str(value)
         for nest in NESTED_KEYS:
             if isinstance(source.get(nest), dict) and (found := _find(keys, source[nest])):
@@ -57,7 +67,7 @@ def arguments(model, body: dict[str, Any]) -> dict[str, Any]:
     out = {}
     for name, field in model.model_fields.items():
         value = source.get(name)
-        if value in EMPTY or value == []:
+        if unfilled(value) or value == []:
             continue
         if _is_list(field.annotation) and isinstance(value, str):
             value = [part.strip() for part in value.split(",") if part.strip()]

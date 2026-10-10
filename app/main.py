@@ -66,10 +66,10 @@ async def vaani_tool_endpoint(name: str, request: Request) -> JSONResponse:
     # Field names only (no values): shows what Vaani actually sends. Warning level because
     # no log level is configured, so info would be dropped on Vercel.
     log.warning(
-        "vaani tool %s: body keys %s, query keys %s, headers %s",
+        "vaani tool %s: body keys %s, query %s, headers %s",
         name,
         sorted(body),
-        sorted(request.query_params),
+        vaani.variable_report(dict(request.query_params)),
         sorted(h for h in request.headers if h not in _PRIVATE_HEADERS),
     )
     webhooks.verify_secret(request)

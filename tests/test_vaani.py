@@ -53,5 +53,21 @@ def test_calls_without_an_id_group_by_caller_and_hour(world):
     assert req.caller_number == "+919822012345" and req.arguments == {"phone": "+919822012345"}
 
 
+def test_unsubstituted_variables_are_ignored_and_reported_without_values():
+    from app.platform import vaani
+    from app.tools.handlers import TOOLS
+
+    query = {"call_id": "{{room_name}}", "caller_number": "+919822012345", "x": ""}
+    assert vaani.variable_report(query) == {"call_id": "literal", "caller_number": "filled", "x": "empty"}
+    req = vaani.to_tool_request(
+        TOOLS["check_service_area"][0],
+        {"locality": "{{locality}}"},
+        query,
+        {},
+        __import__("datetime").datetime(2026, 10, 10, 18),
+    )
+    assert req.call_id == "vaani-+919822012345-2026101018" and req.arguments == {}
+
+
 def test_unknown_tool_404(world):
     assert world.client.post("/vaani/tools/nope", json={}, headers=AUTH).status_code == 404
