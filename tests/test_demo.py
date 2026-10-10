@@ -242,6 +242,12 @@ def gemini(live, monkeypatch):
     return live
 
 
+def test_api_keys_lose_byte_order_mark_and_whitespace(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "﻿AQ.abc123\r\n")
+    get_settings.cache_clear()
+    assert get_settings().gemini_api_key == "AQ.abc123"
+
+
 def test_gemini_preferred_when_both_keys_set(gemini, monkeypatch):
     assert demo.provider() == "gemini" and gemini.client.get("/demo/status").json()["enabled"]
     monkeypatch.setenv("DEMO_PROVIDER", "claude")

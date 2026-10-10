@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -183,6 +183,13 @@ class Settings(BaseSettings):
     demo_effort: Literal["low", "medium", "high"] = "low"  # low keeps spoken replies quick
     demo_daily_turn_limit: int = 300  # visitor messages per day across the whole site
     demo_session_turn_limit: int = 30  # visitor messages per conversation
+
+    @field_validator("gemini_api_key", "anthropic_api_key", mode="before")
+    @classmethod
+    def _clean_key(cls, v: object) -> object:
+        # Keys pasted or piped on Windows can carry a byte-order mark or a newline, which
+        # breaks the HTTP auth header.
+        return v.replace("﻿", "").strip() if isinstance(v, str) else v
 
 
 @lru_cache
