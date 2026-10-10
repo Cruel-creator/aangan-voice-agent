@@ -33,6 +33,12 @@ def test_system_prompt_has_no_price():
     assert_no_price(PROMPT_PATH.read_text(encoding="utf-8"), "system prompt")
 
 
+def test_vaani_prompt_and_setup_have_no_price():
+    root = PROMPT_PATH.parent.parent
+    assert_no_price((root / "prompts" / "vaani_agent_prompt.md").read_text(encoding="utf-8"), "Vaani prompt")
+    assert_no_price((root / "docs" / "VAANI_SETUP.md").read_text(encoding="utf-8"), "Vaani setup")
+
+
 def test_exported_agent_config_has_no_price(env):
     config = build_config("https://example.test")
     assert_no_price(json.dumps(config, ensure_ascii=False), "agent_config.json")
