@@ -20,6 +20,22 @@ def test_env_example_lists_every_setting():
     assert {name.upper() for name in Settings.model_fields} <= listed
 
 
+def test_blank_values_from_render_form_fall_back_to_defaults(monkeypatch):
+    """Fields left empty in the Render dashboard must not stop the app from booting."""
+    for key in (
+        "USD_INR_RATE",
+        "TELEPHONY_COST_INR_PER_MIN",
+        "FIXED_MONTHLY_COST_INR",
+        "SMS_PROVIDER",
+        "PUBLIC_BASE_URL",
+        "TELEGRAM_BOT_TOKEN",
+    ):
+        monkeypatch.setenv(key, "")
+    s = Settings()
+    assert (s.usd_inr_rate, s.telephony_cost_inr_per_min, s.fixed_monthly_cost_inr) == (0.0, 0.0, 0.0)
+    assert s.sms_provider == "console" and s.public_base_url == "http://localhost:8000"
+
+
 def test_render_yaml_sets_every_runtime_secret():
     text = (ROOT / "render.yaml").read_text(encoding="utf-8")
     runtime = {n.upper() for n in Settings.model_fields} - {"ANTHROPIC_API_KEY"}

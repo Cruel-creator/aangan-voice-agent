@@ -80,10 +80,14 @@ class FakeCalendar:
 @pytest.fixture(autouse=True)
 def no_real_database(monkeypatch):
     """Settings also read .env.local (written by `neon link`, holds the production URL).
-    Env vars beat dotenv files, so blank them: no test may reach a real database by accident.
-    tests/test_postgres.py connects only through TEST_DATABASE_URL."""
+    Env vars beat dotenv files, so point them at an unreachable host (blank values are
+    ignored by Settings and would fall through to .env.local). No test may reach a real
+    database by accident; tests/test_postgres.py connects only through TEST_DATABASE_URL."""
+    from app.config import Settings
+
+    monkeypatch.setitem(Settings.model_config, "env_file", None)  # tests never read .env/.env.local
     for key in ("DATABASE_URL", "DATABASE_URL_UNPOOLED", "DATABASE_URL_DIRECT"):
-        monkeypatch.setenv(key, "")
+        monkeypatch.setenv(key, "postgresql://tests-must-not-use-a-real-db.invalid/x")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
