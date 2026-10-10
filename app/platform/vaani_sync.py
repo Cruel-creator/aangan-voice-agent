@@ -101,10 +101,12 @@ def set_api(api: VaaniApi | None) -> None:
 
 
 # ---------- parsing Vaani's fields (shapes vary by agent config; be tolerant) ----------
+BLANKS = {"NA", "N/A", "NULL", "NONE", "UNCLEAR", "UNKNOWN", "NOT ENOUGH DATA"}
+
+
 def _blank(v: Any) -> bool:
-    return v is None or (
-        isinstance(v, str) and (not v.strip() or v.strip().upper() in {"NA", "N/A", "NULL", "NONE"})
-    )
+    """Vaani writes "unclear" or "not enough data" when it couldn't extract a value."""
+    return v is None or (isinstance(v, str) and (not v.strip() or v.strip().upper() in BLANKS))
 
 
 def _as_dict(v: Any) -> dict:

@@ -137,6 +137,7 @@ def test_entities_as_list_or_json_and_budget_words():
     assert vaani_sync.budget_inr("1.5 crore") == 15_000_000
     assert vaani_sync.budget_inr("50k") == 50_000
     assert vaani_sync.budget_inr("NA") is None
+    assert vaani_sync._text("unclear") is None and vaani_sync._text("not enough data") is None
 
 
 def test_dashboard_sync_is_throttled_and_off_without_key(world, vaani, monkeypatch):
