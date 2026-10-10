@@ -37,8 +37,8 @@ backend tools on only if Vaani later sends a call id and caller number with tool
 ## Actions (system tools)
 
 - hold_call: off (not needed).
-- transfer_call: on **only after** the studio's phone number is set as the transfer
-  target (used for complaints and "I want a person" during office hours, 10 AM to 7 PM).
+- transfer_call: off. Riya never transfers; every next step is a call back from the
+  team (owner's decision, 2026-10-10).
 - schedule_callback, agent_transfer: off. (schedule_callback may make the AI place a
   call; callbacks here are made by the team.)
 - Custom tool check_service_area: off.
@@ -65,7 +65,7 @@ backend tools on only if Vaani later sends a call id and caller number with tool
 |---|---|
 | Just give me a rough price | A number without seeing your site would mislead you - the consultation is free with no obligation. |
 | Other studios are cheaper | I can only speak for Aangan Studio. The consultation is free, so you can compare with no obligation. |
-| Are you a robot? / I want a person | Yes, I'm the studio's AI assistant. During office hours I can connect you; otherwise the team will call you back within one working day. |
+| Are you a robot? / I want a person | Yes, I'm the studio's AI assistant. A member of the team will call you back within one working day. |
 | I'm just exploring | That's completely fine. Tell me a little about the space and I can note it for the team. |
 | I don't know what style I want | That's what the consultation is for - the designer will help you decide. |
 
@@ -82,7 +82,7 @@ Custom rules (Agent gives specific response):
 | Structural or legal work | break the wall; remove a wall; building permission; legal advice | We're interior designers and don't do structural or legal work. I can help with the interiors though. |
 | Other studios | recommend another designer; other studios are cheaper | I can only speak for Aangan Studio. The consultation is free, so you can compare with no obligation. |
 | Abuse | abusive language; insults; gaali | I'd like to keep this respectful. I'm happy to help with your project, or the team can call you back. |
-| Existing client complaint | my project is delayed; problem with my work; no one is responding; complaint | I'm sorry. I'm getting this to a senior person right now - you'll get a call back within 15 minutes. (Switch to Human Transfer once transfer_call has the studio number.) |
+| Existing client complaint | my project is delayed; problem with my work; no one is responding; complaint | I'm sorry. I'm getting this to a senior person right now - you'll get a call back within 15 minutes. |
 
 ## Analysis
 
