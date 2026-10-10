@@ -56,7 +56,7 @@ Caller ──► Telephony (Indian DID) ──► Voice platform (any; contract 
 - Telegram Bot API (python-telegram-bot or raw httpx) with inline keyboards
 - Voice platform: not fixed. The backend speaks a neutral JSON contract
   (`app/platform/webhooks.py`, `docs/PLATFORM_API.md`). Languages: English + Hindi.
-- Deploy: Render (web service) — any container host works.
+- Deploy: Vercel (Python runtime, `vercel.json`, region `sin1`). Scheduled jobs: GitHub Actions.
 
 ## Repo layout
 

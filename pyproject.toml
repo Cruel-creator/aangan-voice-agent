@@ -28,6 +28,9 @@ sim = [
     "anthropic>=1.11.0",
 ]
 
+[tool.vercel]
+entrypoint = "app.main:app"  # Vercel loads the FastAPI app from app/main.py
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = ["tests/sim"]

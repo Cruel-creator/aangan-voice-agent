@@ -3,10 +3,9 @@
     python scripts/run_cron.py reroute-handoffs
     python scripts/run_cron.py consult-followups
 
-Run by .github/workflows/cron.yml (free) or by a Render cron job (paid). Needs
-PUBLIC_BASE_URL and CRON_SECRET. Standard library only, so the runner needs no
-dependencies. A free Render service may be asleep and take about a minute to
-wake, hence the long timeout.
+Run by .github/workflows/cron.yml. Needs PUBLIC_BASE_URL and CRON_SECRET.
+Standard library only, so the runner needs no dependencies. A serverless host may
+need a moment to start the app after idle, hence the long timeout.
 """
 
 import json

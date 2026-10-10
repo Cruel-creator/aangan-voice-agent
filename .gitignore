@@ -8,3 +8,5 @@ sim_report.md
 agent_config.json
 .neon
 .env.local
+.vercel
+.env.vercel

@@ -1,4 +1,4 @@
-# Free replacement for Render cron jobs (Render's free plan has no cron).
+# Scheduled jobs. Vercel's Hobby plan only allows daily cron jobs, so GitHub Actions runs these.
 # Needs two repository secrets: PUBLIC_BASE_URL and CRON_SECRET
 # (Settings -> Secrets and variables -> Actions). Until they exist the job skips.
 # GitHub may start scheduled runs a few minutes late; that's fine for these jobs.

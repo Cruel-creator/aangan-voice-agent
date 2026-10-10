@@ -125,7 +125,7 @@ class Settings(BaseSettings):
     """Secrets and deployment settings. Every field is listed in .env.example."""
 
     # `neon link` writes .env.local; values there win over .env.
-    # Blank values (e.g. fields left empty in the Render form) fall back to the defaults below.
+    # Blank values (e.g. fields left empty in the hosting dashboard) fall back to the defaults below.
     model_config = SettingsConfigDict(
         env_file=(ROOT / ".env", ROOT / ".env.local"), extra="ignore", env_ignore_empty=True
     )

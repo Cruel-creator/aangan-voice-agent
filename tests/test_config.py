@@ -21,7 +21,7 @@ def test_env_example_lists_every_setting():
 
 
 def test_blank_values_from_render_form_fall_back_to_defaults(monkeypatch):
-    """Fields left empty in the Render dashboard must not stop the app from booting."""
+    """Fields left empty in the hosting dashboard must not stop the app from booting."""
     for key in (
         "USD_INR_RATE",
         "TELEPHONY_COST_INR_PER_MIN",
@@ -36,7 +36,19 @@ def test_blank_values_from_render_form_fall_back_to_defaults(monkeypatch):
     assert s.sms_provider == "console" and s.public_base_url == "http://localhost:8000"
 
 
-def test_render_yaml_sets_every_runtime_secret():
-    text = (ROOT / "render.yaml").read_text(encoding="utf-8")
-    runtime = {n.upper() for n in Settings.model_fields} - {"ANTHROPIC_API_KEY"}
-    assert [k for k in sorted(runtime) if f"key: {k}" not in text] == []
+def test_vercel_config_points_at_the_app_in_singapore():
+    import json
+    import tomllib
+
+    vercel = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+    entry = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["vercel"][
+        "entrypoint"
+    ]
+    module, _, attr = entry.partition(":")
+    assert vercel["regions"] == ["sin1"]  # same AWS region as the Neon database
+    assert (ROOT / (module.replace(".", "/") + ".py")).exists() and attr == "app"
+    assert list(vercel["functions"]) == [module.replace(".", "/") + ".py"]
+    # Files the app reads at runtime must not be excluded from the bundle.
+    excluded = vercel["functions"]["app/main.py"]["excludeFiles"]
+    for needed in ("config/", "prompts/", "app/"):
+        assert needed not in excluded

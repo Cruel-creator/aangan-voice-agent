@@ -76,7 +76,7 @@ async def telegram_webhook(request: Request) -> dict:
     return {"ok": True, "status": status}
 
 
-# ---------- scheduled jobs (Render cron calls these) ----------
+# ---------- scheduled jobs (.github/workflows/cron.yml calls these) ----------
 def _cron_auth(request: Request) -> None:
     if not _same(request.headers.get("x-cron-secret"), get_settings().cron_secret):
         raise HTTPException(status_code=401, detail="unauthorized")
